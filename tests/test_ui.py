@@ -48,6 +48,10 @@ def test_memory_workspace_search_and_metrics(monkeypatch) -> None:
 
     assert window.preview_table.rowCount() == 1
     assert window.message_metric.text() == "1"
+    window._image_reading_enabled = True
+    window._messages_loaded(window._messages)
+    assert window.status_label.text() == "图片读取已启用 · 消息读取完成"
+    assert window.preview_table.rowCount() == 1
     window.close()
 
 

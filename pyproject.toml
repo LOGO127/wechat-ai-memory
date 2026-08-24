@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "wechat-context-exporter"
-version = "0.3.1"
+version = "0.3.2"
 description = "A local-first WeChat AI memory archive for Windows."
 readme = "README.md"
 requires-python = ">=3.11"

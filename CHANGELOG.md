@@ -1,5 +1,19 @@
 # Changelog
 
+## v0.3.2-alpha
+
+### Fixed
+
+- 让“读取图片”成功状态在消息刷新后仍清晰可见。
+- 为源码测试设置独立 Qt 模式，减少全局 Python 插件的环境干扰。
+
+### Verified
+
+- 从 GitHub 重新下载并校验 ZIP 与单文件版的 SHA-256。
+- 两种 Windows 软件包完成 GUI 加载、搜索、PDF、PNG、Markdown 和 JSON 导出闭环。
+- Windows 微信 4.1.2.18 完成真实数据库密钥、会话、消息和 V2 图片解密验证。
+- 新增发布工作流，标签资产必须先通过打包后 GUI 验收。
+
 ## v0.3.1-alpha
 
 ### Added

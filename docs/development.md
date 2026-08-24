@@ -72,6 +72,9 @@ src/wechat_context_exporter/
 
 1. 更新 `pyproject.toml`、`src/wechat_context_exporter/__init__.py` 和 Windows 版本资源中的版本号。
 2. 运行完整测试。
-3. 构建目录版软件包并在干净的 Windows 用户环境中启动。
-4. 检查 EXE 图标、文件版本和 Release ZIP。
-5. 确认提交中不含 `outputs/`、`work/`、微信数据库、密钥或真实聊天截图。
+3. 构建软件包后运行 `.\scripts\verify_windows_release.ps1`，完成两种 EXE 的 GUI 加载、搜索和导出验收。
+4. 检查 EXE 图标、文件版本、Release ZIP 和 `SHA256SUMS.txt`。
+5. 在干净的 Windows 用户环境中重复启动和导出测试。
+6. 确认提交中不含 `outputs/`、`work/`、微信数据库、密钥或真实聊天截图。
+
+`.github/workflows/release.yml` 会在手动触发或推送 `v*` 标签时重新执行上述构建与验收。只有通过全部检查的标签构建才会创建 GitHub Release。

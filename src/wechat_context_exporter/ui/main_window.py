@@ -195,6 +195,7 @@ class MainWindow(QMainWindow):
         self._image_worker: ImageKeyWorker | None = None
         self._export_worker: ExportWorker | None = None
         self._last_result: ExportResult | None = None
+        self._image_reading_enabled = False
         self._closing = False
         self._settings = QSettings("LocalTools", "WeChatContextExporter")
         self._build_ui()
@@ -441,6 +442,8 @@ class MainWindow(QMainWindow):
     def _source_mode_changed(self) -> None:
         mode = str(self.source_mode.currentData())
         local = mode == "wechat"
+        self._image_reading_enabled = False
+        self.image_key_button.setText("读取图片")
         self.source_label.setText("账户目录" if local else "JSON 文件")
         self.source_edit.setPlaceholderText("自动检测微信 4.x 数据目录" if local else "选择 version 1 JSON 文件")
         self.load_button.setText("连接微信" if local else "加载")
@@ -556,7 +559,8 @@ class MainWindow(QMainWindow):
             self.end_date.setDate(last)
             self.start_date.blockSignals(False)
             self.end_date.blockSignals(False)
-        self.status_label.setText("消息读取完成")
+        status = "图片读取已启用 · 消息读取完成" if self._image_reading_enabled else "消息读取完成"
+        self.status_label.setText(status)
         self.export_button.setEnabled(True)
         self._suggest_output_path()
         self._refresh_preview()
@@ -649,13 +653,16 @@ class MainWindow(QMainWindow):
         self._image_worker.start()
 
     def _image_key_loaded(self, _key: bytes) -> None:
+        self._image_reading_enabled = True
+        self.image_key_button.setText("图片已启用")
         self._set_busy(False)
         self.progress.setRange(0, 4)
         self.progress.setValue(4)
-        self.status_label.setText("图片读取已启用")
         self._conversation_changed()
 
     def _image_key_failed(self, error: str) -> None:
+        self._image_reading_enabled = False
+        self.image_key_button.setText("读取图片")
         self._set_busy(False)
         self.progress.setRange(0, 4)
         self.progress.setValue(0)
@@ -781,6 +788,8 @@ class MainWindow(QMainWindow):
         if self._source is not None and hasattr(self._source, "close"):
             self._source.close()  # type: ignore[attr-defined]
         self._source = None
+        self._image_reading_enabled = False
+        self.image_key_button.setText("读取图片")
         self._set_connection_state("未连接", "idle")
 
     def closeEvent(self, event: QCloseEvent) -> None:
