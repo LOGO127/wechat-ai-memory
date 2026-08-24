@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import shutil
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -25,7 +26,8 @@ DEMO_JSON = ROOT / "examples" / "demo_chat.json"
 MP4_PATH = MEDIA / "wechat-ai-memory-tutorial.mp4"
 GIF_PATH = MEDIA / "wechat-ai-memory-tutorial.gif"
 FPS = 12
-CANVAS_SIZE = (1280, 720)
+CANVAS_SIZE = (1440, 900)
+GIF_SIZE = (960, 600)
 
 
 @dataclass(frozen=True)
@@ -33,6 +35,15 @@ class Shot:
     image: Image.Image
     focus: tuple[int, int, int, int] | None
     cursor: tuple[int, int] | None
+
+
+@dataclass(frozen=True)
+class TutorialCapture:
+    shots: dict[str, Shot]
+    image_images: list[Image.Image]
+    search_images: list[Image.Image]
+    progress_images: list[Image.Image]
+    pdf_pages: list[Image.Image]
 
 
 def font(size: int, bold: bool = False) -> ImageFont.FreeTypeFont:
@@ -83,7 +94,7 @@ def grab(window: main_window.MainWindow, name: str) -> Image.Image:
         return captured.convert("RGB").resize(CANVAS_SIZE, Image.Resampling.LANCZOS)
 
 
-def capture_application() -> tuple[dict[str, Shot], list[Image.Image]]:
+def capture_application() -> TutorialCapture:
     WORK.mkdir(parents=True, exist_ok=True)
     settings = QSettings(str(WORK / "tutorial.ini"), QSettings.Format.IniFormat)
     settings.clear()
@@ -111,22 +122,30 @@ def capture_application() -> tuple[dict[str, Shot], list[Image.Image]]:
     window.source_edit.setText("微信 4.x 数据目录（已连接）")
     window.image_key_button.setEnabled(True)
     window.output_edit.setText("outputs/ECO_project_memory.pdf")
+
+    image_focus = widget_rect(window, window.image_key_button)
+    image_images = [grab(window, "02-image-ready")]
+    window.status_label.setText("图片读取已启用")
+    image_images.append(grab(window, "02-image-loaded"))
+    shots["image"] = Shot(image_images[-1], image_focus, center(image_focus))
+
     range_focus = widget_rect(window, window.conversation_combo, window.start_date, window.end_date)
-    shots["range"] = Shot(grab(window, "02-range"), range_focus, center(range_focus))
+    shots["range"] = Shot(grab(window, "03-range"), range_focus, center(range_focus))
 
     search_focus = widget_rect(window, window.search_edit)
     search_images: list[Image.Image] = []
     for index, query in enumerate(["", "随", "随机", "随机种", "随机种子"]):
         window.search_edit.setText(query)
         app.processEvents()
-        search_images.append(grab(window, f"03-search-{index}"))
+        search_images.append(grab(window, f"04-search-{index}"))
     shots["search"] = Shot(search_images[-1], search_focus, center(search_focus))
 
     window.search_edit.clear()
+    window.keep_pages_check.setChecked(True)
     window.companions_check.setChecked(True)
     export_focus = widget_rect(window, window.output_edit, window.companions_check, window.export_button)
     shots["export"] = Shot(
-        grab(window, "04-export"),
+        grab(window, "05-export"),
         export_focus,
         center(widget_rect(window, window.export_button)),
     )
@@ -139,8 +158,10 @@ def capture_application() -> tuple[dict[str, Shot], list[Image.Image]]:
     window._set_busy(False)
 
     output = WORK / "ECO_project_memory.pdf"
+    pages_dir = WORK / "ECO_project_memory_pages"
     for path in [output, output.with_suffix(".md"), output.with_suffix(".json")]:
         path.unlink(missing_ok=True)
+    shutil.rmtree(pages_dir, ignore_errors=True)
     window.output_edit.setText(str(output))
     window._start_export()
     wait_until(app, lambda: window._last_result is not None, timeout=15.0)
@@ -148,8 +169,14 @@ def capture_application() -> tuple[dict[str, Shot], list[Image.Image]]:
     window.output_edit.setText("outputs/ECO_project_memory.pdf")
     final_focus = widget_rect(window, window.open_folder_button, window.export_button)
     shots["final"] = Shot(grab(window, "06-final"), final_focus, center(final_focus))
+    pdf_pages = []
+    for page_path in sorted(pages_dir.glob("page_[0-9][0-9][0-9][0-9]_*.png")):
+        with Image.open(page_path) as page:
+            pdf_pages.append(page.convert("RGB"))
+    if not pdf_pages:
+        raise RuntimeError("The tutorial export did not produce rendered PDF pages")
     window.close()
-    return shots, search_images + progress_images
+    return TutorialCapture(shots, image_images, search_images, progress_images, pdf_pages)
 
 
 def ease(value: float) -> float:
@@ -210,24 +237,25 @@ def render_stage(
 
 def intro_frames(base: Image.Image, count: int) -> list[Image.Image]:
     background = ImageEnhance.Brightness(base).enhance(0.42).filter(ImageFilter.GaussianBlur(1.4)).convert("RGBA")
-    logo = Image.open(ROOT / "docs" / "images" / "app-icon.png").convert("RGBA").resize((88, 88), Image.Resampling.LANCZOS)
+    logo = Image.open(ROOT / "docs" / "images" / "app-icon.png").convert("RGBA").resize((96, 96), Image.Resampling.LANCZOS)
     frames = []
     for index in range(count):
         frame = background.copy()
         overlay = Image.new("RGBA", CANVAS_SIZE, (0, 0, 0, 0))
-        overlay.alpha_composite(logo, ((CANVAS_SIZE[0] - 88) // 2, 198))
+        overlay.alpha_composite(logo, ((CANVAS_SIZE[0] - 96) // 2, 258))
         draw = ImageDraw.Draw(overlay)
         title = "把微信聊天整理成 AI 记忆档案"
-        subtitle = "本地读取  ·  精准筛选  ·  一键归档"
-        title_font = font(42, True)
-        subtitle_font = font(22)
+        subtitle = "本地读取  ·  图片恢复  ·  Agent-ready 归档"
+        title_font = font(46, True)
+        subtitle_font = font(24)
         title_box = draw.textbbox((0, 0), title, font=title_font)
         subtitle_box = draw.textbbox((0, 0), subtitle, font=subtitle_font)
-        draw.text(((CANVAS_SIZE[0] - title_box[2]) // 2, 315), title, font=title_font, fill="white")
-        draw.text(((CANVAS_SIZE[0] - subtitle_box[2]) // 2, 382), subtitle, font=subtitle_font, fill=(221, 238, 229, 255))
-        line_width = int(420 * min(1.0, (index + 1) / max(1, count - 2)))
-        draw.rounded_rectangle((430, 445, 850, 451), radius=3, fill=(255, 255, 255, 50))
-        draw.rounded_rectangle((430, 445, 430 + line_width, 451), radius=3, fill=(8, 184, 108, 255))
+        draw.text(((CANVAS_SIZE[0] - title_box[2]) // 2, 390), title, font=title_font, fill="white")
+        draw.text(((CANVAS_SIZE[0] - subtitle_box[2]) // 2, 462), subtitle, font=subtitle_font, fill=(221, 238, 229, 255))
+        line_width = int(460 * min(1.0, (index + 1) / max(1, count - 2)))
+        line_x = (CANVAS_SIZE[0] - 460) // 2
+        draw.rounded_rectangle((line_x, 530, line_x + 460, 536), radius=3, fill=(255, 255, 255, 50))
+        draw.rounded_rectangle((line_x, 530, line_x + line_width, 536), radius=3, fill=(8, 184, 108, 255))
         frames.append(Image.alpha_composite(frame, overlay).convert("RGB"))
     return frames
 
@@ -236,51 +264,146 @@ def crossfade(left: Image.Image, right: Image.Image, count: int = 4) -> list[Ima
     return [Image.blend(left, right, (index + 1) / (count + 1)) for index in range(count)]
 
 
-def build_timeline(shots: dict[str, Shot], dynamic: list[Image.Image]) -> list[Image.Image]:
+def fit_image(image: Image.Image, maximum: tuple[int, int]) -> Image.Image:
+    scale = min(maximum[0] / image.width, maximum[1] / image.height)
+    size = (max(1, round(image.width * scale)), max(1, round(image.height * scale)))
+    return image.resize(size, Image.Resampling.LANCZOS)
+
+
+def pdf_viewer_frame(pages: list[Image.Image], active_index: int) -> Image.Image:
+    canvas = Image.new("RGB", CANVAS_SIZE, "#e7ece9").convert("RGBA")
+    draw = ImageDraw.Draw(canvas)
+    draw.rectangle((0, 0, CANVAS_SIZE[0], 72), fill="#1c2924")
+    draw.text((28, 22), "ECO_project_memory.pdf", font=font(22, True), fill="white")
+    draw.text((1170, 24), f"第 {active_index + 1} / {len(pages)} 页", font=font(18), fill="#cfe2d8")
+
+    draw.rectangle((0, 72, 228, CANVAS_SIZE[1]), fill="#f7f9f8")
+    draw.text((28, 96), "页面", font=font(18, True), fill="#52615a")
+    thumb_y = 136
+    for index, page in enumerate(pages[:3]):
+        thumbnail = fit_image(page, (126, 178)).convert("RGBA")
+        x = (228 - thumbnail.width) // 2
+        outline = "#08b86c" if index == active_index else "#cbd5d0"
+        draw.rounded_rectangle(
+            (x - 7, thumb_y - 7, x + thumbnail.width + 7, thumb_y + thumbnail.height + 7),
+            radius=5,
+            fill="white",
+            outline=outline,
+            width=4 if index == active_index else 2,
+        )
+        canvas.alpha_composite(thumbnail, (x, thumb_y))
+        draw.text((102, thumb_y + thumbnail.height + 12), str(index + 1), font=font(15, True), fill="#66736d")
+        thumb_y += 238
+
+    page = fit_image(pages[active_index], (590, 790)).convert("RGBA")
+    page_x = 296 + (710 - page.width) // 2
+    page_y = 90 + (790 - page.height) // 2
+    shadow = Image.new("RGBA", (page.width + 34, page.height + 34), (0, 0, 0, 0))
+    shadow_draw = ImageDraw.Draw(shadow)
+    shadow_draw.rectangle((17, 17, page.width + 17, page.height + 17), fill=(23, 35, 31, 75))
+    shadow = shadow.filter(ImageFilter.GaussianBlur(11))
+    canvas.alpha_composite(shadow, (page_x - 17, page_y - 11))
+    canvas.alpha_composite(page, (page_x, page_y))
+
+    panel_x = 1070
+    draw.text((panel_x, 180), "实际导出效果", font=font(28, True), fill="#17231f")
+    draw.rounded_rectangle((panel_x, 226, panel_x + 72, 232), radius=3, fill="#08b86c")
+    details = [
+        "对话按时间顺序完整排版",
+        "聊天图片独立高清成页",
+        "可直接交给 Agent 阅读",
+    ]
+    for index, detail in enumerate(details):
+        y = 285 + index * 82
+        draw.ellipse((panel_x, y + 7, panel_x + 13, y + 20), fill="#08b86c")
+        draw.text((panel_x + 28, y), detail, font=font(21), fill="#34423c")
+    draw.text((panel_x, 570), "同时生成", font=font(17, True), fill="#6b7771")
+    chip_x = panel_x
+    for label in ["PDF", "Markdown", "JSON"]:
+        label_width = draw.textbbox((0, 0), label, font=font(16, True))[2]
+        chip_width = label_width + 28
+        draw.rounded_rectangle((chip_x, 608, chip_x + chip_width, 648), radius=6, fill="#ffffff", outline="#c7d2cd")
+        draw.text((chip_x + 14, 617), label, font=font(16, True), fill="#087f4f")
+        chip_x += chip_width + 10
+    draw.text((panel_x, 720), "本地生成 · 数据不上传", font=font(18), fill="#6b7771")
+    return canvas.convert("RGB")
+
+
+def build_timeline(capture: TutorialCapture) -> list[Image.Image]:
+    shots = capture.shots
     frames = intro_frames(shots["range"].image, 20)
     previous_cursor = (CANVAS_SIZE[0] // 2, CANVAS_SIZE[1] - 54)
 
-    stages = [
-        ("01", "连接已登录的 Windows 微信", shots["connect"], 22),
-        ("02", "选择会话和需要保留的日期", shots["range"], 22),
+    connect_shot = shots["connect"]
+    connect_frames = [
+        render_stage(connect_shot, "01", "连接已登录的 Windows 微信", index / 21, previous_cursor)
+        for index in range(22)
     ]
-    for step, caption, shot, count in stages:
-        rendered = [render_stage(shot, step, caption, index / (count - 1), previous_cursor) for index in range(count)]
-        frames.extend(crossfade(frames[-1], rendered[0]))
-        frames.extend(rendered)
-        previous_cursor = shot.cursor or previous_cursor
+    frames.extend(crossfade(frames[-1], connect_frames[0]))
+    frames.extend(connect_frames)
+    previous_cursor = connect_shot.cursor or previous_cursor
 
-    search_images = dynamic[:5]
+    image_shot = shots["image"]
+    image_frames = []
+    for index in range(26):
+        active_image = capture.image_images[0] if index < 18 else capture.image_images[1]
+        active = Shot(active_image, image_shot.focus, image_shot.cursor)
+        image_frames.append(render_stage(active, "02", "读取图片，恢复聊天中的原图", index / 25, previous_cursor))
+    frames.extend(crossfade(frames[-1], image_frames[0]))
+    frames.extend(image_frames)
+    previous_cursor = image_shot.cursor or previous_cursor
+
+    range_shot = shots["range"]
+    range_frames = [
+        render_stage(range_shot, "03", "选择会话和需要保留的日期", index / 21, previous_cursor)
+        for index in range(22)
+    ]
+    frames.extend(crossfade(frames[-1], range_frames[0]))
+    frames.extend(range_frames)
+    previous_cursor = range_shot.cursor or previous_cursor
+
     search_shot = shots["search"]
     search_frames = []
     for index in range(28):
-        variant = search_images[min(4, max(0, (index - 8) // 4))]
+        variant = capture.search_images[min(4, max(0, (index - 8) // 4))]
         active = Shot(variant, search_shot.focus, search_shot.cursor)
-        search_frames.append(render_stage(active, "03", "输入关键词，预览会立即筛选", index / 27, previous_cursor, click=False))
+        search_frames.append(render_stage(active, "04", "输入关键词，预览会立即筛选", index / 27, previous_cursor, click=False))
     frames.extend(crossfade(frames[-1], search_frames[0]))
     frames.extend(search_frames)
     previous_cursor = search_shot.cursor or previous_cursor
 
     export_shot = shots["export"]
     export_frames = [
-        render_stage(export_shot, "04", "生成 PDF · Markdown · JSON", index / 23, previous_cursor)
+        render_stage(export_shot, "05", "生成 PDF · Markdown · JSON", index / 23, previous_cursor)
         for index in range(24)
     ]
     frames.extend(crossfade(frames[-1], export_frames[0]))
     frames.extend(export_frames)
 
-    progress_images = dynamic[5:]
     for index in range(18):
-        active = Shot(progress_images[min(3, index // 5)], export_shot.focus, export_shot.cursor)
-        frames.append(render_stage(active, "04", "档案正在本机生成", index / 17, export_shot.cursor, click=False))
+        active = Shot(capture.progress_images[min(3, index // 5)], export_shot.focus, export_shot.cursor)
+        frames.append(render_stage(active, "05", "档案正在本机生成", index / 17, export_shot.cursor, click=False))
 
     final_shot = shots["final"]
-    final_frames = [
-        render_stage(final_shot, "完成", "记忆档案已安全保存到本地", index / 27, export_shot.cursor, click=False)
-        for index in range(28)
-    ]
+    final_frames = [render_stage(final_shot, "完成", "记忆档案已保存到本地", index / 15, export_shot.cursor, click=False) for index in range(16)]
     frames.extend(crossfade(frames[-1], final_frames[0]))
     frames.extend(final_frames)
+
+    for page_index in range(min(2, len(capture.pdf_pages))):
+        viewer = Shot(pdf_viewer_frame(capture.pdf_pages, page_index), None, None)
+        viewer_frames = [
+            render_stage(
+                viewer,
+                "06",
+                f"查看实际导出的 PDF · 第 {page_index + 1} 页",
+                index / 29,
+                None,
+                click=False,
+            )
+            for index in range(30)
+        ]
+        frames.extend(crossfade(frames[-1], viewer_frames[0], count=6))
+        frames.extend(viewer_frames)
     return frames
 
 
@@ -298,7 +421,7 @@ def write_media(frames: list[Image.Image]) -> None:
         for frame in frames:
             writer.append_data(np.asarray(frame))
 
-    gif_frames = [frame.resize((960, 540), Image.Resampling.LANCZOS) for frame in frames[::2]]
+    gif_frames = [frame.resize(GIF_SIZE, Image.Resampling.LANCZOS) for frame in frames[::2]]
     palette = gif_frames[0].quantize(colors=96, method=Image.Quantize.MEDIANCUT)
     indexed = [
         frame.quantize(palette=palette, dither=Image.Dither.NONE)
@@ -318,8 +441,8 @@ def write_media(frames: list[Image.Image]) -> None:
 
 
 def main() -> int:
-    shots, dynamic = capture_application()
-    frames = build_timeline(shots, dynamic)
+    capture = capture_application()
+    frames = build_timeline(capture)
     write_media(frames)
     return 0
 

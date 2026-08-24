@@ -29,11 +29,11 @@
 
 <p align="center">
   <a href="docs/media/wechat-ai-memory-tutorial.mp4">
-    <img src="docs/media/wechat-ai-memory-tutorial.gif" width="960" alt="微信 AI 记忆库使用教学：连接微信、筛选消息并生成记忆档案">
+    <img src="docs/media/wechat-ai-memory-tutorial.gif" width="960" alt="微信 AI 记忆库使用教学：连接微信、读取图片、筛选消息、生成档案并查看 PDF">
   </a>
 </p>
 
-<p align="center"><sub>连接微信 → 选择记忆范围 → 关键词筛选 → 生成 PDF、Markdown 与 JSON。点击动画观看高清版本。</sub></p>
+<p align="center"><sub>连接微信 → 读取图片 → 选择记忆范围 → 关键词筛选 → 生成档案 → 查看实际 PDF。点击动画观看高清版本。</sub></p>
 
 > [!IMPORTANT]
 > 当前为 `v0.3.1-alpha` 私人测试版。本机微信读取已在 Windows 微信 4.x 上验证，但微信升级可能改变内部数据格式。首次使用前建议备份重要数据。
