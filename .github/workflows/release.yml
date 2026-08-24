@@ -35,7 +35,7 @@ jobs:
       - name: Verify packaged GUI and outputs
         run: .\scripts\verify_windows_release.ps1
       - name: Upload verified build
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: WeChatAIMemory-Windows-${{ github.sha }}
           if-no-files-found: error
