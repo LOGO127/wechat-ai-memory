@@ -1,12 +1,15 @@
 from __future__ import annotations
 
+import os
+import re
+import shutil
 import tempfile
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime
 from pathlib import Path
 from typing import Callable
 
-from .models import Conversation, Message
+from .models import Conversation, Message, MessageType
 from .pdf_exporter import PdfExporter
 from .rendering import ChatRenderer, ImagePageRenderer
 from .sources import ChatSource
@@ -25,6 +28,7 @@ class ExportOptions:
     pages_dir: Path | None = None
     markdown_path: Path | None = None
     json_path: Path | None = None
+    query: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -60,8 +64,10 @@ class ExportService:
         options: ExportOptions,
         progress: ProgressCallback | None = None,
     ) -> ExportResult:
+        self._validate_options(options)
         conversation = self._find_conversation(source, options.conversation_id)
         messages = source.get_messages(options.conversation_id, options.start, options.end)
+        messages = self._filter_messages(messages, options.query)
         self._progress(progress, 1, 5, "Rendering chat pages")
         chat_pages = self.chat_renderer.render(conversation, messages, options.start, options.end)
 
@@ -97,8 +103,25 @@ class ExportService:
             self._progress(progress, 2, 5, "Building PDF")
             pdf_path = self.pdf_exporter.export(page_paths, options.output_pdf, conversation.name)
             self._progress(progress, 3, 5, "Writing companion files")
-            markdown_path = export_markdown(conversation, messages, options.markdown_path) if options.markdown_path else None
-            json_path = export_json(conversation, messages, options.json_path) if options.json_path else None
+            companion_messages = self._materialize_attachments(messages, options)
+            markdown_path = (
+                export_markdown(
+                    conversation,
+                    self._relative_attachment_paths(companion_messages, options.markdown_path),
+                    options.markdown_path,
+                )
+                if options.markdown_path
+                else None
+            )
+            json_path = (
+                export_json(
+                    conversation,
+                    self._relative_attachment_paths(companion_messages, options.json_path),
+                    options.json_path,
+                )
+                if options.json_path
+                else None
+            )
 
             persistent_pages_dir = None
             if options.pages_dir is not None:
@@ -120,6 +143,78 @@ class ExportService:
                 markdown_path=markdown_path,
                 json_path=json_path,
             )
+
+    @staticmethod
+    def _validate_options(options: ExportOptions) -> None:
+        if options.start is not None and options.end is not None and options.start > options.end:
+            raise ValueError("Start date/time must not be after end date/time")
+
+        destinations = [options.output_pdf, options.markdown_path, options.json_path]
+        resolved = [path.expanduser().resolve() for path in destinations if path is not None]
+        if len(resolved) != len(set(resolved)):
+            raise ValueError("PDF, Markdown, and JSON output paths must be different")
+        if options.pages_dir is not None and options.pages_dir.expanduser().resolve() in resolved:
+            raise ValueError("Rendered pages directory must be different from output file paths")
+
+    @staticmethod
+    def _filter_messages(messages: list[Message], query: str | None) -> list[Message]:
+        normalized = (query or "").strip().casefold()
+        if not normalized:
+            return messages
+        return [
+            message
+            for message in messages
+            if normalized in message.sender.casefold()
+            or normalized in message.content.casefold()
+            or normalized in message.type.value.casefold()
+        ]
+
+    @staticmethod
+    def _materialize_attachments(messages: list[Message], options: ExportOptions) -> list[Message]:
+        if options.markdown_path is None and options.json_path is None:
+            return messages
+
+        assets_dir = options.output_pdf.expanduser().resolve().with_name(f"{options.output_pdf.stem}_assets")
+        copied: dict[Path, Path] = {}
+        materialized: list[Message] = []
+        for index, message in enumerate(messages, start=1):
+            if message.type not in {MessageType.IMAGE, MessageType.FILE}:
+                materialized.append(message)
+                continue
+            source = Path(message.content).expanduser().resolve()
+            if not source.is_file():
+                materialized.append(message)
+                continue
+            target = copied.get(source)
+            if target is None:
+                assets_dir.mkdir(parents=True, exist_ok=True)
+                safe_id = re.sub(r"[^A-Za-z0-9._-]+", "_", message.id).strip("._")[:80] or "attachment"
+                suffix = source.suffix if 1 < len(source.suffix) <= 10 else ".bin"
+                target = assets_dir / f"{index:04d}_{safe_id}{suffix}"
+                if source != target:
+                    shutil.copy2(source, target)
+                copied[source] = target
+            materialized.append(replace(message, content=str(target)))
+        return materialized
+
+    @staticmethod
+    def _relative_attachment_paths(messages: list[Message], output_path: Path) -> list[Message]:
+        output_dir = output_path.expanduser().resolve().parent
+        relative: list[Message] = []
+        for message in messages:
+            if message.type not in {MessageType.IMAGE, MessageType.FILE}:
+                relative.append(message)
+                continue
+            content = Path(message.content)
+            if not content.is_absolute():
+                relative.append(message)
+                continue
+            try:
+                portable = Path(os.path.relpath(content, output_dir)).as_posix()
+            except ValueError:
+                portable = content.as_posix()
+            relative.append(replace(message, content=portable))
+        return relative
 
     @staticmethod
     def _find_conversation(source: ChatSource, conversation_id: str) -> Conversation:

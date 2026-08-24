@@ -39,9 +39,9 @@ class JsonChatSource:
                 raise SourceError(f"Conversation at index {index} must be an object")
             try:
                 conversation = Conversation(
-                    id=str(item["id"]),
-                    name=str(item["name"]),
-                    kind=ConversationKind(item.get("kind", "direct")),
+                    id=_required_string(item, "id"),
+                    name=_required_string(item, "name"),
+                    kind=ConversationKind(_optional_string(item, "kind", "direct")),
                 )
             except (KeyError, TypeError, ValueError) as exc:
                 raise SourceError(f"Invalid conversation at index {index}: {exc}") from exc
@@ -51,7 +51,7 @@ class JsonChatSource:
             self._conversations.append(conversation)
 
             parsed: list[Message] = []
-            items = item.get("messages", [])
+            items = item.get("messages")
             if not isinstance(items, list):
                 raise SourceError(f"messages for {conversation.id} must be an array")
             for message_index, message_item in enumerate(items):
@@ -66,20 +66,26 @@ class JsonChatSource:
         if not isinstance(raw, dict):
             raise SourceError(f"Message {index} in {conversation_id} must be an object")
         try:
-            timestamp = _parse_timestamp(str(raw["timestamp"]))
-            message_type = MessageType(raw.get("type", "text"))
-            content = str(raw.get("content", ""))
-            if message_type is MessageType.IMAGE:
+            timestamp = _parse_timestamp(_required_string(raw, "timestamp"))
+            message_type = MessageType(_optional_string(raw, "type", "text"))
+            content = _required_string(raw, "content")
+            if message_type in {MessageType.IMAGE, MessageType.FILE} and content:
                 content = str((self.path.parent / content).resolve()) if not Path(content).is_absolute() else content
+            is_outgoing = raw.get("is_outgoing", False)
+            if not isinstance(is_outgoing, bool):
+                raise TypeError("is_outgoing must be a boolean")
+            reply_to = raw.get("reply_to")
+            if reply_to is not None and not isinstance(reply_to, str):
+                raise TypeError("reply_to must be a string or null")
             return Message(
-                id=str(raw["id"]),
+                id=_required_string(raw, "id"),
                 conversation_id=conversation_id,
-                sender=str(raw["sender"]),
+                sender=_required_string(raw, "sender"),
                 timestamp=timestamp,
                 type=message_type,
                 content=content,
-                is_outgoing=bool(raw.get("is_outgoing", False)),
-                reply_to=str(raw["reply_to"]) if raw.get("reply_to") is not None else None,
+                is_outgoing=is_outgoing,
+                reply_to=reply_to,
             )
         except (KeyError, TypeError, ValueError) as exc:
             raise SourceError(f"Invalid message {index} in {conversation_id}: {exc}") from exc
@@ -112,3 +118,18 @@ def _parse_timestamp(value: str) -> datetime:
     except ValueError as exc:
         raise ValueError(f"timestamp must be ISO 8601, got {value!r}") from exc
 
+
+def _required_string(raw: dict[str, Any], key: str) -> str:
+    if key not in raw:
+        raise KeyError(key)
+    value = raw[key]
+    if not isinstance(value, str):
+        raise TypeError(f"{key} must be a string")
+    return value
+
+
+def _optional_string(raw: dict[str, Any], key: str, default: str) -> str:
+    value = raw.get(key, default)
+    if not isinstance(value, str):
+        raise TypeError(f"{key} must be a string")
+    return value

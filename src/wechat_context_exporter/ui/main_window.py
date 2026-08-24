@@ -697,6 +697,7 @@ class MainWindow(QMainWindow):
             pages_dir=output.with_name(f"{output.stem}_pages") if self.keep_pages_check.isChecked() else None,
             markdown_path=output.with_suffix(".md") if self.companions_check.isChecked() else None,
             json_path=output.with_suffix(".json") if self.companions_check.isChecked() else None,
+            query=self.search_edit.text().strip() or None,
         )
         self._settings.setValue("outputPath", str(output))
         self._set_busy(True)

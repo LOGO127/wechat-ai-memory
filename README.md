@@ -12,7 +12,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/LOGO127/wechat-ai-memory/releases/tag/v0.3.0-alpha"><img alt="Release" src="https://img.shields.io/badge/release-v0.3.0--alpha-07a85b?style=flat-square"></a>
+  <a href="https://github.com/LOGO127/wechat-ai-memory/releases/tag/v0.3.1-alpha"><img alt="Release" src="https://img.shields.io/badge/release-v0.3.1--alpha-07a85b?style=flat-square"></a>
   <img alt="Platform" src="https://img.shields.io/badge/platform-Windows%2010%20%7C%2011-2563eb?style=flat-square">
   <a href="https://github.com/LOGO127/wechat-ai-memory/actions/workflows/test.yml"><img alt="Tests" src="https://github.com/LOGO127/wechat-ai-memory/actions/workflows/test.yml/badge.svg"></a>
   <a href="LICENSE"><img alt="License" src="https://img.shields.io/badge/license-MIT-17211c?style=flat-square"></a>
@@ -30,7 +30,7 @@
 ![微信 AI 记忆库桌面界面](docs/images/wechat-ai-memory.png)
 
 > [!IMPORTANT]
-> 当前为 `v0.3.0-alpha` 私人测试版。本机微信读取已在 Windows 微信 4.x 上验证，但微信升级可能改变内部数据格式。首次使用前建议备份重要数据。
+> 当前为 `v0.3.1-alpha` 私人测试版。本机微信读取已在 Windows 微信 4.x 上验证，但微信升级可能改变内部数据格式。首次使用前建议备份重要数据。
 
 ## 为什么做这个项目
 
@@ -54,7 +54,7 @@
 
 ### Windows 软件包
 
-从 [v0.3.0-alpha Release](https://github.com/LOGO127/wechat-ai-memory/releases/tag/v0.3.0-alpha) 下载 `WeChatAIMemory-Windows-x64.zip`，完整解压后运行：
+从 [v0.3.1-alpha Release](https://github.com/LOGO127/wechat-ai-memory/releases/tag/v0.3.1-alpha) 下载 `WeChatAIMemory-Windows-x64.zip`，完整解压后运行：
 
 ```text
 WeChatAIMemory.exe
@@ -130,6 +130,7 @@ wechat-context-exporter `
 ```
 
 交换格式和字段定义请参阅 [JSON 数据格式](docs/json-format.md)。
+生成伴随文件时，可用的图片和文件附件会复制到与 PDF 同名的 `_assets` 目录，并在 Markdown 和 JSON 中使用相对路径。
 
 ## 工作原理
 
@@ -153,7 +154,7 @@ Version 1 JSON ─────────────────────�
 
 ## 参与开发
 
-问题报告和改进建议请先阅读 [CONTRIBUTING.md](CONTRIBUTING.md)。提交问题时不要上传真实聊天数据库、密钥、联系人名称或未脱敏截图。
+问题报告和改进建议请先阅读 [CONTRIBUTING.md](CONTRIBUTING.md)，版本变化见 [CHANGELOG.md](CHANGELOG.md)。提交问题时不要上传真实聊天数据库、密钥、联系人名称或未脱敏截图。
 
 ## 品牌与声明
 

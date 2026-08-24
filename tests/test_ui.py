@@ -1,15 +1,18 @@
 from __future__ import annotations
 
 import os
+import time
 from datetime import datetime
+from pathlib import Path
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from PySide6.QtCore import QDate, QPoint
+from PySide6.QtCore import QDate, QPoint, QSettings
 from PySide6.QtWidgets import QApplication, QLabel
 
 from wechat_context_exporter.models import Message, MessageType
 from wechat_context_exporter.ui import main_window
+from wechat_context_exporter.sources import JsonChatSource
 
 
 def test_memory_workspace_search_and_metrics(monkeypatch) -> None:
@@ -46,3 +49,47 @@ def test_memory_workspace_search_and_metrics(monkeypatch) -> None:
     assert window.preview_table.rowCount() == 1
     assert window.message_metric.text() == "1"
     window.close()
+
+
+def test_gui_loads_json_and_exports_the_visible_search_results(tmp_path, monkeypatch) -> None:
+    app = QApplication.instance() or QApplication([])
+    settings = QSettings(str(tmp_path / "settings.ini"), QSettings.Format.IniFormat)
+    monkeypatch.setattr(main_window, "QSettings", lambda *_args: settings)
+    monkeypatch.setattr(main_window, "discover_wechat4_accounts", lambda: [])
+    monkeypatch.setattr(main_window.QMessageBox, "information", lambda *_args: None)
+    monkeypatch.setattr(main_window.QMessageBox, "critical", lambda *_args: None)
+    window = main_window.MainWindow()
+
+    window.source_mode.setCurrentIndex(window.source_mode.findData("json"))
+    window.source_edit.setText(str((Path.cwd() / "examples" / "demo_chat.json").resolve()))
+    window._load_source()
+    _wait_until(app, lambda: window._source is not None)
+    _wait_until(app, lambda: window._message_worker is not None and not window._message_worker.isRunning())
+    app.processEvents()
+
+    assert window.preview_table.rowCount() == 8
+    window.search_edit.setText("随机种子")
+    app.processEvents()
+    assert window.preview_table.rowCount() == 1
+
+    output = tmp_path / "filtered.pdf"
+    window.output_edit.setText(str(output))
+    window.companions_check.setChecked(True)
+    window._start_export()
+    _wait_until(app, lambda: window._last_result is not None)
+    app.processEvents()
+
+    assert output.is_file()
+    exported = JsonChatSource(output.with_suffix(".json")).get_messages("eco-project")
+    assert [message.id for message in exported] == ["m006"]
+    assert window.status_label.text() == "1 页 · 1 条消息"
+    window.close()
+
+
+def _wait_until(app: QApplication, predicate, timeout: float = 5.0) -> None:
+    deadline = time.monotonic() + timeout
+    while not predicate():
+        if time.monotonic() >= deadline:
+            raise AssertionError("Timed out while waiting for Qt background work")
+        app.processEvents()
+        time.sleep(0.01)

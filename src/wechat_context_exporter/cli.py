@@ -23,6 +23,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--pages-dir", type=Path, help="Keep the rendered PNG pages in this directory")
     parser.add_argument("--markdown", type=Path, help="Also write a Markdown transcript")
     parser.add_argument("--json", dest="json_output", type=Path, help="Also write normalized filtered JSON")
+    parser.add_argument("--query", help="Only export messages whose sender, content, or type contains this text")
     return parser
 
 
@@ -54,6 +55,7 @@ def main(argv: list[str] | None = None) -> int:
         pages_dir=args.pages_dir,
         markdown_path=args.markdown,
         json_path=args.json_output,
+        query=args.query,
     )
     try:
         result = ExportService().export(source, options, _print_progress)
