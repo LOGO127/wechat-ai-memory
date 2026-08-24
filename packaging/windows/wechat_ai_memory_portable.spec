@@ -17,7 +17,7 @@ a = Analysis(
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
-    excludes=["pytest", "pypdf"],
+    excludes=["imageio", "imageio_ffmpeg", "numpy", "pytest", "pypdf"],
     noarchive=False,
     optimize=1,
 )
