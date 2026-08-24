@@ -5,6 +5,7 @@
 ### Added
 
 - 提供无需解压的 `WeChatAIMemory-Portable.exe` 单文件版本。
+- 在 README 中加入可循环播放、可点击查看高清版的使用教学动画。
 
 ### Fixed
 

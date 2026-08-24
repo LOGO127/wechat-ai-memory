@@ -32,14 +32,26 @@ py -3 -m venv .venv-gui
 .\scripts\build_windows.ps1
 ```
 
-脚本会安装 `build` 依赖、生成多尺寸 Windows 图标、运行 PyInstaller 目录版构建，并创建：
+脚本会安装 `build` 依赖、生成多尺寸 Windows 图标，同时构建目录版和单文件版：
 
 ```text
 dist/WeChatAIMemory/WeChatAIMemory.exe
 outputs/WeChatAIMemory-Windows-x64.zip
+outputs/WeChatAIMemory-Portable.exe
 ```
 
-目录版保留 Qt、Frida 及其 DLL 结构，兼容性和启动速度优先于单文件体积。正式公开发布前仍需完成 Windows 代码签名。
+目录版保留 Qt、Frida 及其 DLL 结构，优先保证兼容性和启动速度；单文件版便于直接下载试用。正式公开发布前仍需完成 Windows 代码签名。
+
+## README 教学动画
+
+教学动画只使用 `examples/demo_chat.json` 的演示数据，不会连接或读取本机微信：
+
+```powershell
+python -m pip install -e ".[gui,media]"
+python scripts\generate_readme_tutorial.py
+```
+
+脚本会生成 README 内联使用的 GIF，以及点击动画后打开的高清 MP4。
 
 ## 代码结构
 

@@ -600,7 +600,11 @@ class MainWindow(QMainWindow):
             MessageType.SYSTEM: "#6b7280",
         }
         for row, message in enumerate(visible):
-            content = Path(message.content).name if message.type is MessageType.IMAGE else message.content
+            content = (
+                Path(message.content).name
+                if message.type in (MessageType.IMAGE, MessageType.FILE)
+                else message.content
+            )
             content = content.replace("\n", " ")
             if len(content) > 180:
                 content = content[:177] + "..."

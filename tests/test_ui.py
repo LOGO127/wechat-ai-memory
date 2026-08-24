@@ -68,6 +68,12 @@ def test_gui_loads_json_and_exports_the_visible_search_results(tmp_path, monkeyp
     app.processEvents()
 
     assert window.preview_table.rowCount() == 8
+    file_rows = [
+        window.preview_table.item(row, 3).text()
+        for row in range(window.preview_table.rowCount())
+        if window.preview_table.item(row, 2).text() == "文件"
+    ]
+    assert file_rows == ["experiment_run_042.log"]
     window.search_edit.setText("随机种子")
     app.processEvents()
     assert window.preview_table.rowCount() == 1
