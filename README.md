@@ -54,13 +54,16 @@
 
 ### Windows 软件包
 
-从 [v0.3.1-alpha Release](https://github.com/LOGO127/wechat-ai-memory/releases/tag/v0.3.1-alpha) 下载 `WeChatAIMemory-Windows-x64.zip`，完整解压后运行：
+从 [v0.3.1-alpha Release](https://github.com/LOGO127/wechat-ai-memory/releases/tag/v0.3.1-alpha) 选择一种方式：
 
-```text
-WeChatAIMemory.exe
-```
+| 下载文件 | 使用方式 | 适合场景 |
+| --- | --- | --- |
+| `WeChatAIMemory-Portable.exe` | 下载后双击运行，无需安装或解压 | 普通用户，推荐 |
+| `WeChatAIMemory-Windows-x64.zip` | 完整解压，再运行目录内的 `WeChatAIMemory.exe` | 启动更快，便于排查安全软件拦截 |
 
 软件包已经包含 Python、Qt、Frida、PDF 与加密运行库，目标电脑不需要安装开发环境。
+
+单文件版首次启动会把运行库释放到 Windows 临时目录，等待十几秒属于正常现象。ZIP 版不能只复制其中的 EXE，必须保留同目录下的 `_internal` 文件夹。
 
 > [!NOTE]
 > 当前版本尚未代码签名，Windows SmartScreen 可能显示“未知发布者”。Frida 用于读取当前用户已登录的微信进程，部分安全软件也可能提示风险。请只从本仓库 Release 下载并核对来源。

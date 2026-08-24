@@ -2,6 +2,10 @@
 
 ## v0.3.1-alpha
 
+### Added
+
+- 提供无需解压的 `WeChatAIMemory-Portable.exe` 单文件版本。
+
 ### Fixed
 
 - 让伴随 JSON 使用 Version 1 交换结构，支持再次导入。

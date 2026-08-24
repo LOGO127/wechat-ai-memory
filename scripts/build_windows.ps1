@@ -23,12 +23,20 @@ try {
     & $Python -m PyInstaller --noconfirm --clean packaging\windows\wechat_ai_memory.spec
     if ($LASTEXITCODE -ne 0) { throw "PyInstaller build failed." }
 
+    & $Python -m PyInstaller --noconfirm --clean packaging\windows\wechat_ai_memory_portable.spec
+    if ($LASTEXITCODE -ne 0) { throw "Portable executable build failed." }
+
     $Archive = Join-Path $Root "outputs\WeChatAIMemory-Windows-x64.zip"
     if (Test-Path -LiteralPath $Archive) {
         Remove-Item -LiteralPath $Archive
     }
     Compress-Archive -Path "dist\WeChatAIMemory\*" -DestinationPath $Archive -CompressionLevel Optimal
+
+    $Portable = Join-Path $Root "outputs\WeChatAIMemory-Portable.exe"
+    Copy-Item -LiteralPath "dist\WeChatAIMemory-Portable.exe" -Destination $Portable -Force
+
     Write-Host "Windows package: $Archive"
+    Write-Host "Portable executable: $Portable"
 }
 finally {
     Pop-Location
