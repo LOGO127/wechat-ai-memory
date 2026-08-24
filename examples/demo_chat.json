@@ -1,0 +1,96 @@
+{
+  "version": 1,
+  "conversations": [
+    {
+      "id": "eco-project",
+      "name": "ECO 项目讨论群",
+      "kind": "group",
+      "messages": [
+        {
+          "id": "m001",
+          "sender": "张三",
+          "timestamp": "2026-08-21T09:12:00",
+          "type": "text",
+          "content": "昨晚的 workflow 已经跑完。先看收敛曲线，再决定是否调整第二阶段的学习率。"
+        },
+        {
+          "id": "m002",
+          "sender": "李四",
+          "timestamp": "2026-08-21T09:16:00",
+          "type": "text",
+          "content": "我整理了结果。验证集在第 18 个 epoch 后没有继续改善，但训练集仍在下降，可能出现了过拟合。",
+          "is_outgoing": true
+        },
+        {
+          "id": "m003",
+          "sender": "李四",
+          "timestamp": "2026-08-21T09:17:00",
+          "type": "image",
+          "content": "demo_result.png",
+          "is_outgoing": true
+        },
+        {
+          "id": "m004",
+          "sender": "张三",
+          "timestamp": "2026-08-21T09:22:00",
+          "type": "text",
+          "content": "图里有两个信息需要复核：一是 validation loss 的平滑窗口，二是异常点是否来自数据加载失败。请把原始日志也保留下来。",
+          "reply_to": "m003"
+        },
+        {
+          "id": "m005",
+          "sender": "系统",
+          "timestamp": "2026-08-21T10:00:00",
+          "type": "system",
+          "content": "项目里程碑已更新为：复核实验结果"
+        },
+        {
+          "id": "m006",
+          "sender": "李四",
+          "timestamp": "2026-08-22T14:08:00",
+          "type": "text",
+          "content": "已经排除了数据加载失败。新的实验固定了随机种子，并把早停 patience 从 5 调到 8。结果会和上一轮使用完全相同的数据切分。",
+          "is_outgoing": true
+        },
+        {
+          "id": "m007",
+          "sender": "李四",
+          "timestamp": "2026-08-22T14:10:00",
+          "type": "file",
+          "content": "experiment_run_042.log",
+          "is_outgoing": true
+        },
+        {
+          "id": "m008",
+          "sender": "张三",
+          "timestamp": "2026-08-22T14:21:00",
+          "type": "text",
+          "content": "可以。最终报告里同时放最佳指标和训练成本，不要只比较 accuracy。"
+        }
+      ]
+    },
+    {
+      "id": "mentor-chat",
+      "name": "导师",
+      "kind": "direct",
+      "messages": [
+        {
+          "id": "m101",
+          "sender": "导师",
+          "timestamp": "2026-08-20T20:30:00",
+          "type": "text",
+          "content": "本周先把实验设计和评价指标写清楚，下周再扩展数据规模。"
+        },
+        {
+          "id": "m102",
+          "sender": "我",
+          "timestamp": "2026-08-20T20:34:00",
+          "type": "text",
+          "content": "明白，我会把主要假设、对照实验和失败判据放进同一份计划。",
+          "is_outgoing": true
+        }
+      ]
+    }
+  ]
+}
+
