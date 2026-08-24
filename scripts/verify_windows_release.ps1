@@ -34,9 +34,15 @@ foreach ($Executable in @($DirectoryExe, $PortableExe, $PublishedPortable)) {
 }
 
 $ForbiddenRuntime = Get-ChildItem -LiteralPath (Join-Path $Root "dist\WeChatAIMemory") -Recurse -Force |
-    Where-Object { $_.Name -match '^(numpy|imageio|imageio_ffmpeg)(\.|$)' }
+    Where-Object { $_.Name -match '^(numpy|imageio)(\.|$)' }
 if ($ForbiddenRuntime) {
-    throw "Media-only dependencies leaked into the release package: $($ForbiddenRuntime.FullName -join ', ')"
+    throw "Unused media dependencies leaked into the release package: $($ForbiddenRuntime.FullName -join ', ')"
+}
+
+$BundledFFmpeg = Get-ChildItem -LiteralPath (Join-Path $Root "dist\WeChatAIMemory") -Recurse -File |
+    Where-Object { $_.Name -match '^ffmpeg.*\.exe$' }
+if (-not $BundledFFmpeg) {
+    throw "The WXGF image decoder was not bundled in the Windows release."
 }
 
 New-Item -ItemType Directory -Path $SmokeRoot -Force | Out-Null

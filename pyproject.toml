@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "wechat-context-exporter"
-version = "0.3.2"
+version = "0.3.3"
 description = "A local-first WeChat AI memory archive for Windows."
 readme = "README.md"
 requires-python = ">=3.11"
@@ -12,6 +12,7 @@ license = { file = "LICENSE" }
 authors = [{ name = "WeChat AI Memory contributors" }]
 dependencies = [
   "frida>=17,<18",
+  "imageio-ffmpeg>=0.6,<1",
   "Pillow>=10.4,<12",
   "pywinauto>=0.6.9,<1",
   "pycryptodome>=3.21,<4",
@@ -22,10 +23,6 @@ dependencies = [
 [project.optional-dependencies]
 gui = ["PySide6>=6.7,<7"]
 build = ["pyinstaller>=6.11,<7"]
-media = [
-  "imageio>=2.37,<3",
-  "imageio-ffmpeg>=0.6,<1",
-]
 dev = [
   "pypdf>=5,<7",
   "pytest>=8.2,<9",

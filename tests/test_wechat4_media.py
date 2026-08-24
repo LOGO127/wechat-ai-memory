@@ -1,11 +1,17 @@
 from __future__ import annotations
 
 import struct
+from io import BytesIO
+from types import SimpleNamespace
 
 from Crypto.Cipher import AES
+from PIL import Image
 
+from wechat_context_exporter.sources import wechat4_media
 from wechat_context_exporter.sources.wechat4_media import (
     V2_MAGIC,
+    _wxgf_partitions,
+    decode_wxgf_image,
     decrypt_v2_image,
     derive_image_xor_key,
     image_extension,
@@ -61,3 +67,39 @@ def test_decrypt_v2_image_reads_full_padding_block_for_aligned_head(tmp_path) ->
     )
 
     assert decrypt_v2_image(source, key, xor_key) == head + tail
+
+
+def test_wxgf_partition_parser_finds_embedded_hevc_stream() -> None:
+    stream = b"\x00\x00\x00\x01\x40\x01hevc-frame"
+    data = b"wxgf" + b"\x09" + len(stream).to_bytes(4, "big") + stream
+
+    assert _wxgf_partitions(data) == [(9, len(stream))]
+
+
+def test_wxgf_decoder_passes_largest_partition_to_ffmpeg(monkeypatch) -> None:
+    small = b"\x00\x00\x00\x01small"
+    large = b"\x00\x00\x00\x01larger-hevc-frame"
+    data = (
+        b"wxgf"
+        + b"\x09"
+        + len(small).to_bytes(4, "big")
+        + small
+        + len(large).to_bytes(4, "big")
+        + large
+    )
+    output = BytesIO()
+    Image.new("RGB", (24, 32), "#167b55").save(output, format="PNG")
+    captured = {}
+
+    def fake_run(command, **kwargs):
+        captured["command"] = command
+        captured["input"] = kwargs["input"]
+        return SimpleNamespace(returncode=0, stdout=output.getvalue(), stderr=b"")
+
+    monkeypatch.setattr(wechat4_media.subprocess, "run", fake_run)
+
+    decoded = decode_wxgf_image(data, ffmpeg_path="ffmpeg-test")
+
+    assert captured["command"][0] == "ffmpeg-test"
+    assert captured["input"] == large
+    assert decoded.startswith(b"\x89PNG\r\n\x1a\n")

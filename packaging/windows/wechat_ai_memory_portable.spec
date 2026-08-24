@@ -1,5 +1,7 @@
 from pathlib import Path
 
+from PyInstaller.utils.hooks import collect_data_files
+
 
 ROOT = Path(SPEC).resolve().parents[2]
 
@@ -12,12 +14,13 @@ a = Analysis(
             str(ROOT / "src" / "wechat_context_exporter" / "assets"),
             "wechat_context_exporter/assets",
         ),
+        *collect_data_files("imageio_ffmpeg"),
     ],
     hiddenimports=[],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
-    excludes=["imageio", "imageio_ffmpeg", "numpy", "pytest", "pypdf"],
+    excludes=["imageio", "numpy", "pytest", "pypdf"],
     noarchive=False,
     optimize=1,
 )

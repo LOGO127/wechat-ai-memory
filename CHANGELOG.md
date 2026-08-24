@@ -1,5 +1,20 @@
 # Changelog
 
+## v0.3.3-alpha
+
+### Fixed
+
+- 解码微信 4.x 的 WXGF 图片容器，优先导出原图而不是低清 `_t` 缩略图。
+- PDF 提升到 300 DPI，并保持既有版式与原图纵横比。
+- 为会话名、发送者和消息正文加入 emoji 字体回退，避免 emoji 人名显示为空白方框。
+- Windows 软件包显式携带 WXGF 解码所需的 FFmpeg 二进制。
+
+### Verified
+
+- 使用真实微信记录验证两张 1206×2622 原图的解码、预览和 PDF 独立页。
+- 逐页检查 6 页高清样例与 5 页 emoji 人名样例。
+- 新增 WXGF 分区、300 DPI、emoji 回退和 PDF 页面尺寸回归测试。
+
 ## v0.3.2-alpha
 
 ### Fixed

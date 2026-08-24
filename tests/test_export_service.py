@@ -54,8 +54,12 @@ def test_end_to_end_export_with_image_and_companions(tmp_path):
     assert result.chat_page_count == 1
     assert result.image_page_count == 1
     assert result.page_count == 2
-    assert len(PdfReader(str(output)).pages) == 2
+    document = PdfReader(str(output))
+    assert len(document.pages) == 2
+    assert document.pages[0].images[0].image.size == (2480, 3508)
     assert len(list(pages_dir.glob("page_*.png"))) == 2
+    with Image.open(pages_dir / "page_0001_chat.png") as rendered_page:
+        assert rendered_page.size == (2480, 3508)
     assert not (pages_dir / "page_0099_chat.png").exists()
     markdown_text = markdown.read_text(encoding="utf-8")
     assert "Please inspect the image" in markdown_text
