@@ -72,19 +72,16 @@ def run_smoke(executable: Path, fixture: Path, output: Path) -> dict[str, object
         source_combo.select("JSON 文件")
         time.sleep(0.5)
 
-        sidebar_edits = sorted(
-            [
-                item
-                for item in window.descendants(control_type="Edit")
-                if item.rectangle().left < window.rectangle().left + 420
-            ],
-            key=lambda item: item.rectangle().top,
+        source_edit = window.child_window(
+            auto_id="QApplication.MainWindow.appRoot.mainSplitter.sidebar.sourcePathField",
+            control_type="Edit",
         )
-        if len(sidebar_edits) < 2:
-            raise RuntimeError(f"Expected two sidebar edits, found {len(sidebar_edits)}")
-        source_edit, output_edit = sidebar_edits[0], sidebar_edits[-1]
+        output_edit = window.child_window(
+            auto_id="QApplication.MainWindow.appRoot.mainSplitter.sidebar.outputPathField",
+            control_type="Edit",
+        )
         source_edit.set_edit_text(str(fixture))
-        window.child_window(title="加载", control_type="Button").click_input()
+        window.child_window(title="加载", control_type="Button").invoke()
         _wait_for(lambda: "消息读取完成" in _text_names(window), "message loading")
 
         search = window.child_window(
@@ -100,7 +97,7 @@ def run_smoke(executable: Path, fixture: Path, output: Path) -> dict[str, object
         output_edit.set_edit_text(str(output))
         _ensure_checked(window.child_window(title="保留渲染 PNG", control_type="CheckBox"))
         _ensure_checked(window.child_window(title="生成 Markdown 与 JSON", control_type="CheckBox"))
-        window.child_window(title="生成记忆档案", control_type="Button").click_input()
+        window.child_window(title="生成记忆档案", control_type="Button").invoke()
 
         _wait_for(output.is_file, "PDF output", timeout=45)
         _wait_for(output.with_suffix(".json").is_file, "JSON output", timeout=15)

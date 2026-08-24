@@ -31,6 +31,8 @@ def test_memory_workspace_search_and_metrics(monkeypatch) -> None:
 
     assert window.windowTitle() == "微信 AI 记忆库"
     assert not window.windowIcon().isNull()
+    assert window.source_edit.objectName() == "sourcePathField"
+    assert window.output_edit.objectName() == "outputPathField"
     assert window.preview_table.rowCount() == 2
     assert window.message_metric.text() == "2"
     assert window.image_metric.text() == "1"
