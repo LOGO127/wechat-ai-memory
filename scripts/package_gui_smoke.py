@@ -69,6 +69,10 @@ def run_smoke(executable: Path, fixture: Path, output: Path) -> dict[str, object
             window.descendants(control_type="ComboBox"),
             key=lambda item: item.rectangle().top,
         )[0]
+        if source_combo.selected_text() != "本机微信":
+            raise RuntimeError(
+                f"Packaged application did not start with local WeChat: {source_combo.selected_text()!r}"
+            )
         source_combo.select("JSON 文件")
         time.sleep(0.5)
 

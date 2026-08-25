@@ -15,6 +15,71 @@ from wechat_context_exporter.ui import main_window
 from wechat_context_exporter.sources import JsonChatSource
 
 
+def test_workspace_always_starts_with_local_wechat_even_after_json_was_used(tmp_path, monkeypatch) -> None:
+    app = QApplication.instance() or QApplication([])
+    settings = QSettings(str(tmp_path / "settings.ini"), QSettings.Format.IniFormat)
+    settings.setValue("sourceMode", "json")
+    settings.setValue("jsonSourcePath", str((Path.cwd() / "examples" / "demo_chat.json").resolve()))
+    monkeypatch.setattr(main_window, "QSettings", lambda *_args: settings)
+    monkeypatch.setattr(main_window, "discover_wechat4_accounts", lambda: [])
+
+    window = main_window.MainWindow()
+    app.processEvents()
+
+    assert window.source_mode.currentData() == "wechat"
+    assert window.source_label.text() == "账户目录"
+    assert window.load_button.text() == "连接微信"
+    assert window.image_key_button.isVisibleTo(window)
+    window.close()
+
+
+def test_conversation_picker_supports_case_insensitive_contains_search(monkeypatch) -> None:
+    app = QApplication.instance() or QApplication([])
+    monkeypatch.setattr(main_window, "discover_wechat4_accounts", lambda: [])
+    window = main_window.MainWindow()
+    window.conversation_combo.addItem("ECO 项目讨论群", "eco")
+    window.conversation_combo.addItem("产品发布", "release")
+    window.conversation_combo.addItem("Alice", "alice")
+
+    completer = window.conversation_combo.completer()
+    assert len(window.conversation_combo.lineEdit().actions()) == 1
+    completer.setCompletionPrefix("项目")
+    assert completer.completionCount() == 1
+    assert completer.currentCompletion() == "ECO 项目讨论群"
+    completer.setCompletionPrefix("ali")
+    assert completer.completionCount() == 1
+    assert completer.currentCompletion() == "Alice"
+
+    window.conversation_combo.setCurrentIndex(0)
+    window._conversation_search_edited("发布")
+    assert window.conversation_combo.currentIndex() == -1
+    assert window.conversation_combo.currentText() == "发布"
+    window._conversation_completion_selected("产品发布")
+    assert window.conversation_combo.currentData() == "release"
+    window.close()
+
+
+def test_date_range_calendar_selection_and_ordering(monkeypatch) -> None:
+    app = QApplication.instance() or QApplication([])
+    monkeypatch.setattr(main_window, "discover_wechat4_accounts", lambda: [])
+    window = main_window.MainWindow()
+    window.start_date.setDate(QDate(2026, 8, 10))
+    window.end_date.setDate(QDate(2026, 8, 20))
+
+    menu, calendar = window._create_calendar_menu(window.start_date)
+    calendar.clicked.emit(QDate(2026, 8, 12))
+    assert window.start_date.date() == QDate(2026, 8, 12)
+    assert not menu.isVisible()
+
+    window.start_date.setDate(QDate(2026, 8, 25))
+    assert window.end_date.date() == QDate(2026, 8, 25)
+    window.end_date.setDate(QDate(2026, 8, 5))
+    assert window.start_date.date() == QDate(2026, 8, 5)
+    assert not window.start_calendar_button.icon().isNull()
+    assert not window.end_calendar_button.icon().isNull()
+    window.close()
+
+
 def test_memory_workspace_search_and_metrics(monkeypatch) -> None:
     app = QApplication.instance() or QApplication([])
     monkeypatch.setattr(main_window, "discover_wechat4_accounts", lambda: [])
@@ -33,6 +98,9 @@ def test_memory_workspace_search_and_metrics(monkeypatch) -> None:
     assert not window.windowIcon().isNull()
     assert window.source_edit.objectName() == "sourcePathField"
     assert window.output_edit.objectName() == "outputPathField"
+    assert window.minimumHeight() == 760
+    assert window.source_mode.geometry().bottom() < window.source_label.geometry().top()
+    assert window.source_edit.geometry().bottom() < window.load_button.geometry().top()
     assert window.preview_table.rowCount() == 2
     assert window.message_metric.text() == "2"
     assert window.image_metric.text() == "1"

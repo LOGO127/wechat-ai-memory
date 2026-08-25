@@ -8,9 +8,12 @@ from PySide6.QtCore import QDate, QSettings, QThread, QTimer, QUrl, Qt, Signal
 from PySide6.QtGui import QColor, QCloseEvent, QDesktopServices, QFont, QFontDatabase, QIcon
 from PySide6.QtWidgets import (
     QAbstractItemView,
+    QAbstractSpinBox,
     QApplication,
+    QCalendarWidget,
     QCheckBox,
     QComboBox,
+    QCompleter,
     QDateEdit,
     QFileDialog,
     QFrame,
@@ -19,6 +22,7 @@ from PySide6.QtWidgets import (
     QLabel,
     QLineEdit,
     QMainWindow,
+    QMenu,
     QMessageBox,
     QProgressBar,
     QPushButton,
@@ -26,7 +30,9 @@ from PySide6.QtWidgets import (
     QStyle,
     QTableWidget,
     QTableWidgetItem,
+    QToolButton,
     QVBoxLayout,
+    QWidgetAction,
     QWidget,
 )
 
@@ -44,6 +50,10 @@ APP_ID = "LocalTools.WeChatAIMemory"
 def application_icon() -> QIcon:
     asset_path = Path(__file__).resolve().parents[1] / "assets" / "app-icon.svg"
     return QIcon(str(asset_path))
+
+
+def asset_icon(name: str) -> QIcon:
+    return QIcon(str(Path(__file__).resolve().parents[1] / "assets" / name))
 
 
 class SourceLoadWorker(QThread):
@@ -187,7 +197,7 @@ class MainWindow(QMainWindow):
         self.setWindowTitle(APP_NAME)
         self.setWindowIcon(application_icon())
         self.resize(1280, 820)
-        self.setMinimumSize(1020, 700)
+        self.setMinimumSize(1020, 760)
         self._source: ChatSource | None = None
         self._messages: list[Message] = []
         self._source_worker: SourceLoadWorker | None = None
@@ -294,23 +304,71 @@ class MainWindow(QMainWindow):
         side_layout.addWidget(_section_label("记忆范围", "02"))
         side_layout.addWidget(_field_label("联系人 / 群聊"))
         self.conversation_combo = QComboBox()
+        self.conversation_combo.setEditable(True)
+        self.conversation_combo.setInsertPolicy(QComboBox.InsertPolicy.NoInsert)
+        conversation_search = self.conversation_combo.lineEdit()
+        conversation_search.setPlaceholderText("搜索联系人或群聊")
+        conversation_search.setClearButtonEnabled(True)
+        conversation_search.addAction(
+            asset_icon("search.svg"),
+            QLineEdit.ActionPosition.LeadingPosition,
+        )
+        conversation_search.textEdited.connect(self._conversation_search_edited)
+        completer = self.conversation_combo.completer()
+        completer.setCaseSensitivity(Qt.CaseSensitivity.CaseInsensitive)
+        completer.setFilterMode(Qt.MatchFlag.MatchContains)
+        completer.setCompletionMode(QCompleter.CompletionMode.PopupCompletion)
+        completer.activated[str].connect(self._conversation_completion_selected)
         self.conversation_combo.currentIndexChanged.connect(self._conversation_changed)
         side_layout.addWidget(self.conversation_combo)
         side_layout.addWidget(_field_label("时间范围"))
-        self.start_date = QDateEdit(calendarPopup=True)
-        self.end_date = QDateEdit(calendarPopup=True)
+        self.start_date = QDateEdit()
+        self.end_date = QDateEdit()
         for date_edit in (self.start_date, self.end_date):
             date_edit.setDisplayFormat("yyyy-MM-dd")
             date_edit.setDate(QDate.currentDate())
-            date_edit.dateChanged.connect(self._refresh_preview)
+            date_edit.setButtonSymbols(QAbstractSpinBox.ButtonSymbols.NoButtons)
+            date_edit.setObjectName("dateInput")
+        self.start_date.dateChanged.connect(self._start_date_changed)
+        self.end_date.dateChanged.connect(self._end_date_changed)
+
+        self.start_calendar_button = QToolButton()
+        self.end_calendar_button = QToolButton()
+        for button, tooltip in (
+            (self.start_calendar_button, "从日历选择开始日期"),
+            (self.end_calendar_button, "从日历选择结束日期"),
+        ):
+            button.setObjectName("calendarButton")
+            button.setIcon(asset_icon("calendar-days.svg"))
+            button.setToolTip(tooltip)
+            button.setFixedSize(34, 40)
+        self.start_calendar_button.clicked.connect(
+            lambda: self._show_date_calendar(self.start_date, self.start_calendar_button)
+        )
+        self.end_calendar_button.clicked.connect(
+            lambda: self._show_date_calendar(self.end_date, self.end_calendar_button)
+        )
+
+        start_picker = QWidget()
+        start_picker_layout = QHBoxLayout(start_picker)
+        start_picker_layout.setContentsMargins(0, 0, 0, 0)
+        start_picker_layout.setSpacing(0)
+        start_picker_layout.addWidget(self.start_date, 1)
+        start_picker_layout.addWidget(self.start_calendar_button)
+        end_picker = QWidget()
+        end_picker_layout = QHBoxLayout(end_picker)
+        end_picker_layout.setContentsMargins(0, 0, 0, 0)
+        end_picker_layout.setSpacing(0)
+        end_picker_layout.addWidget(self.end_date, 1)
+        end_picker_layout.addWidget(self.end_calendar_button)
         date_layout = QHBoxLayout()
         date_layout.setSpacing(8)
-        date_layout.addWidget(self.start_date, 1)
+        date_layout.addWidget(start_picker, 1)
         range_dash = QLabel("—")
         range_dash.setObjectName("rangeDash")
         range_dash.setAlignment(Qt.AlignmentFlag.AlignCenter)
         date_layout.addWidget(range_dash)
-        date_layout.addWidget(self.end_date, 1)
+        date_layout.addWidget(end_picker, 1)
         side_layout.addLayout(date_layout)
 
         metrics_layout = QHBoxLayout()
@@ -505,7 +563,6 @@ class MainWindow(QMainWindow):
 
     def _source_loaded(self, source: ChatSource) -> None:
         self._source = source
-        self._settings.setValue("sourceMode", self.source_mode.currentData())
         self._settings.setValue(
             f"{self.source_mode.currentData()}SourcePath",
             self.source_edit.text().strip(),
@@ -533,12 +590,26 @@ class MainWindow(QMainWindow):
         self.status_label.setText("连接失败")
         QMessageBox.critical(self, "无法连接数据", error)
 
+    def _conversation_search_edited(self, text: str) -> None:
+        index = self.conversation_combo.currentIndex()
+        if index >= 0 and self.conversation_combo.itemText(index) != text:
+            self.conversation_combo.blockSignals(True)
+            self.conversation_combo.setCurrentIndex(-1)
+            self.conversation_combo.setEditText(text)
+            self.conversation_combo.blockSignals(False)
+        self.export_button.setEnabled(False)
+
+    def _conversation_completion_selected(self, text: str) -> None:
+        index = self.conversation_combo.findText(text, Qt.MatchFlag.MatchExactly)
+        if index >= 0:
+            self.conversation_combo.setCurrentIndex(index)
+
     def _conversation_changed(self) -> None:
+        if not self._source or self.conversation_combo.currentIndex() < 0:
+            return
         self._messages = []
         self.preview_table.setRowCount(0)
         self.export_button.setEnabled(False)
-        if not self._source or self.conversation_combo.currentIndex() < 0:
-            return
         self.conversation_combo.setEnabled(False)
         self.status_label.setText("正在读取消息...")
         self.progress.setRange(0, 0)
@@ -771,10 +842,51 @@ class MainWindow(QMainWindow):
         end_date = self.end_date.date().toPython()
         return datetime.combine(start_date, time.min), datetime.combine(end_date, time.max)
 
+    def _start_date_changed(self, selected: QDate) -> None:
+        if selected > self.end_date.date():
+            self.end_date.blockSignals(True)
+            self.end_date.setDate(selected)
+            self.end_date.blockSignals(False)
+        self._refresh_preview()
+
+    def _end_date_changed(self, selected: QDate) -> None:
+        if selected < self.start_date.date():
+            self.start_date.blockSignals(True)
+            self.start_date.setDate(selected)
+            self.start_date.blockSignals(False)
+        self._refresh_preview()
+
+    def _create_calendar_menu(self, date_edit: QDateEdit) -> tuple[QMenu, QCalendarWidget]:
+        menu = QMenu(self)
+        menu.setObjectName("calendarMenu")
+        calendar = QCalendarWidget(menu)
+        calendar.setObjectName("rangeCalendar")
+        calendar.setMinimumSize(320, 260)
+        calendar.setGridVisible(True)
+        calendar.setFirstDayOfWeek(Qt.DayOfWeek.Monday)
+        calendar.setHorizontalHeaderFormat(QCalendarWidget.HorizontalHeaderFormat.ShortDayNames)
+        calendar.setVerticalHeaderFormat(QCalendarWidget.VerticalHeaderFormat.NoVerticalHeader)
+        calendar.setMinimumDate(date_edit.minimumDate())
+        calendar.setMaximumDate(date_edit.maximumDate())
+        calendar.setSelectedDate(date_edit.date())
+        action = QWidgetAction(menu)
+        action.setDefaultWidget(calendar)
+        menu.addAction(action)
+
+        def select_date(selected: QDate) -> None:
+            date_edit.setDate(selected)
+            menu.close()
+
+        calendar.clicked.connect(select_date)
+        return menu, calendar
+
+    def _show_date_calendar(self, date_edit: QDateEdit, anchor: QToolButton) -> None:
+        menu, _calendar = self._create_calendar_menu(date_edit)
+        menu.exec(anchor.mapToGlobal(anchor.rect().bottomLeft()))
+
     def _restore_settings(self) -> None:
-        mode = str(self._settings.value("sourceMode", "wechat"))
-        index = self.source_mode.findData(mode)
-        self.source_mode.setCurrentIndex(max(index, 0))
+        mode = "wechat"
+        self.source_mode.setCurrentIndex(self.source_mode.findData(mode))
         source_path = str(self._settings.value(f"{mode}SourcePath", ""))
         legacy_path = str(self._settings.value("sourcePath", ""))
         if not source_path and legacy_path and Path(legacy_path).exists():
@@ -951,6 +1063,28 @@ QLineEdit#searchField {
     background: #ffffff;
     padding-left: 12px;
 }
+QComboBox QLineEdit {
+    border: 0;
+    background: transparent;
+    padding: 0;
+}
+QDateEdit#dateInput {
+    border-top-right-radius: 0;
+    border-bottom-right-radius: 0;
+    padding: 0 8px;
+}
+QToolButton#calendarButton {
+    background: #ffffff;
+    border: 1px solid #ced7d2;
+    border-left: 0;
+    border-top-right-radius: 6px;
+    border-bottom-right-radius: 6px;
+    padding: 7px;
+}
+QToolButton#calendarButton:hover {
+    background: #f0f4f2;
+    border-color: #9eada5;
+}
 QComboBox::drop-down, QDateEdit::drop-down {
     border: 0;
     width: 26px;
@@ -961,6 +1095,26 @@ QComboBox QAbstractItemView {
     selection-background-color: #e5f7ed;
     selection-color: #17211c;
     padding: 4px;
+}
+QMenu#calendarMenu {
+    background: #ffffff;
+    border: 1px solid #ced7d2;
+    padding: 4px;
+}
+QCalendarWidget#rangeCalendar {
+    background: #ffffff;
+}
+QCalendarWidget#rangeCalendar QAbstractItemView:enabled {
+    color: #27322c;
+    background: #ffffff;
+    selection-background-color: #07c160;
+    selection-color: #ffffff;
+}
+QCalendarWidget#rangeCalendar QToolButton {
+    color: #27322c;
+    background: #ffffff;
+    border: 0;
+    min-height: 30px;
 }
 QPushButton {
     min-height: 38px;
