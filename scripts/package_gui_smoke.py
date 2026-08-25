@@ -35,6 +35,18 @@ def _ensure_checked(checkbox) -> None:
         checkbox.toggle()
 
 
+def _control_by_id_suffix(window, suffix: str, control_type: str):
+    matches = [
+        item
+        for item in window.descendants(control_type=control_type)
+        if item.element_info.automation_id.endswith(suffix)
+    ]
+    if len(matches) != 1:
+        ids = [item.element_info.automation_id for item in matches]
+        raise RuntimeError(f"Expected one {control_type} ending in {suffix!r}, got {ids!r}")
+    return matches[0]
+
+
 def run_smoke(executable: Path, fixture: Path, output: Path) -> dict[str, object]:
     executable = executable.resolve(strict=True)
     fixture = fixture.resolve(strict=True)
@@ -76,14 +88,8 @@ def run_smoke(executable: Path, fixture: Path, output: Path) -> dict[str, object
         source_combo.select("JSON 文件")
         time.sleep(0.5)
 
-        source_edit = window.child_window(
-            auto_id="QApplication.MainWindow.appRoot.mainSplitter.sidebar.sourcePathField",
-            control_type="Edit",
-        )
-        output_edit = window.child_window(
-            auto_id="QApplication.MainWindow.appRoot.mainSplitter.sidebar.outputPathField",
-            control_type="Edit",
-        )
+        source_edit = _control_by_id_suffix(window, ".sourcePathField", "Edit")
+        output_edit = _control_by_id_suffix(window, ".outputPathField", "Edit")
         source_edit.set_edit_text(str(fixture))
         window.child_window(title="加载", control_type="Button").invoke()
         _wait_for(lambda: "消息读取完成" in _text_names(window), "message loading")
@@ -97,10 +103,7 @@ def run_smoke(executable: Path, fixture: Path, output: Path) -> dict[str, object
                 f"{conversation_combo.selected_text()!r}"
             )
 
-        search = window.child_window(
-            auto_id="QApplication.MainWindow.appRoot.mainSplitter.workspace.searchField",
-            control_type="Edit",
-        )
+        search = _control_by_id_suffix(window, ".searchField", "Edit")
         search.set_edit_text("随机种子")
         _wait_for(
             lambda: "1 条匹配 · 当前范围 8 条" in _text_names(window),
