@@ -41,21 +41,26 @@ def test_conversation_picker_supports_case_insensitive_contains_search(monkeypat
     window.conversation_combo.addItem("产品发布", "release")
     window.conversation_combo.addItem("Alice", "alice")
 
-    completer = window.conversation_combo.completer()
-    assert len(window.conversation_combo.lineEdit().actions()) == 1
-    completer.setCompletionPrefix("项目")
-    assert completer.completionCount() == 1
-    assert completer.currentCompletion() == "ECO 项目讨论群"
-    completer.setCompletionPrefix("ali")
-    assert completer.completionCount() == 1
-    assert completer.currentCompletion() == "Alice"
+    assert not window.conversation_combo.isEditable()
+    assert window.conversation_combo.count() == 3
+    assert not window.conversation_search_button.icon().isNull()
 
-    window.conversation_combo.setCurrentIndex(0)
-    window._conversation_search_edited("发布")
-    assert window.conversation_combo.currentIndex() == -1
-    assert window.conversation_combo.currentText() == "发布"
-    window._conversation_completion_selected("产品发布")
-    assert window.conversation_combo.currentData() == "release"
+    choices = [
+        (window.conversation_combo.itemText(index), window.conversation_combo.itemData(index))
+        for index in range(window.conversation_combo.count())
+    ]
+    dialog = main_window.ConversationSearchDialog(choices, "eco", window)
+    dialog.search_edit.setText("发布")
+    visible = [
+        dialog.choice_list.item(index).text()
+        for index in range(dialog.choice_list.count())
+        if not dialog.choice_list.item(index).isHidden()
+    ]
+    assert visible == ["产品发布"]
+    assert dialog.selected_data() == "release"
+    dialog.search_edit.setText("ali")
+    assert dialog.selected_data() == "alice"
+    dialog.close()
     window.close()
 
 
@@ -66,10 +71,18 @@ def test_date_range_calendar_selection_and_ordering(monkeypatch) -> None:
     window.start_date.setDate(QDate(2026, 8, 10))
     window.end_date.setDate(QDate(2026, 8, 20))
 
-    menu, calendar = window._create_calendar_menu(window.start_date)
-    calendar.clicked.emit(QDate(2026, 8, 12))
-    assert window.start_date.date() == QDate(2026, 8, 12)
-    assert not menu.isVisible()
+    dialog = main_window.DatePickerDialog(
+        "选择开始日期",
+        QDate(2026, 8, 10),
+        QDate(2020, 1, 1),
+        QDate(2030, 12, 31),
+        window,
+    )
+    dialog.calendar.setSelectedDate(QDate(2026, 8, 12))
+    assert dialog.selected_date() == QDate(2026, 8, 12)
+    assert dialog.month_label.text() == "2026 年 8 月"
+    assert not dialog.calendar.isNavigationBarVisible()
+    dialog.close()
 
     window.start_date.setDate(QDate(2026, 8, 25))
     assert window.end_date.date() == QDate(2026, 8, 25)
@@ -141,6 +154,8 @@ def test_gui_loads_json_and_exports_the_visible_search_results(tmp_path, monkeyp
     _wait_until(app, lambda: window._message_worker is not None and not window._message_worker.isRunning())
     app.processEvents()
 
+    assert window.conversation_combo.currentData() == "eco-project"
+    assert window.conversation_combo.currentText() == "ECO 项目讨论群"
     assert window.preview_table.rowCount() == 8
     file_rows = [
         window.preview_table.item(row, 3).text()

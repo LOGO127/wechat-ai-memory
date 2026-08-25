@@ -4,8 +4,16 @@ import sys
 from datetime import datetime, time
 from pathlib import Path
 
-from PySide6.QtCore import QDate, QSettings, QThread, QTimer, QUrl, Qt, Signal
-from PySide6.QtGui import QColor, QCloseEvent, QDesktopServices, QFont, QFontDatabase, QIcon
+from PySide6.QtCore import QDate, QSettings, Qt, QThread, QTimer, QUrl, Signal
+from PySide6.QtGui import (
+    QCloseEvent,
+    QColor,
+    QDesktopServices,
+    QFont,
+    QFontDatabase,
+    QIcon,
+    QTextCharFormat,
+)
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QAbstractSpinBox,
@@ -13,16 +21,18 @@ from PySide6.QtWidgets import (
     QCalendarWidget,
     QCheckBox,
     QComboBox,
-    QCompleter,
     QDateEdit,
+    QDialog,
+    QDialogButtonBox,
     QFileDialog,
     QFrame,
     QHBoxLayout,
     QHeaderView,
     QLabel,
     QLineEdit,
+    QListWidget,
+    QListWidgetItem,
     QMainWindow,
-    QMenu,
     QMessageBox,
     QProgressBar,
     QPushButton,
@@ -32,16 +42,19 @@ from PySide6.QtWidgets import (
     QTableWidgetItem,
     QToolButton,
     QVBoxLayout,
-    QWidgetAction,
     QWidget,
 )
 
 from ..models import Message, MessageType
 from ..rendering.fonts import FontBook
 from ..service import ExportOptions, ExportResult, ExportService
-from ..sources import ChatSource, JsonChatSource, WeChat4LocalSource, discover_wechat4_accounts
+from ..sources import (
+    ChatSource,
+    JsonChatSource,
+    WeChat4LocalSource,
+    discover_wechat4_accounts,
+)
 from ..sources.wechat4_crypto import extract_image_key
-
 
 APP_NAME = "微信 AI 记忆库"
 APP_ID = "LocalTools.WeChatAIMemory"
@@ -191,6 +204,183 @@ def _metric(caption: str) -> tuple[QWidget, QLabel]:
     return widget, value
 
 
+class ConversationSearchDialog(QDialog):
+    def __init__(
+        self,
+        choices: list[tuple[str, object]],
+        selected_data: object | None,
+        parent: QWidget | None = None,
+    ) -> None:
+        super().__init__(parent)
+        self.setObjectName("conversationSearchDialog")
+        self.setWindowTitle("选择联系人或群聊")
+        self.setModal(True)
+        self.resize(430, 500)
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(20, 18, 20, 18)
+        layout.setSpacing(12)
+        title = QLabel("选择联系人或群聊")
+        title.setObjectName("dialogTitle")
+        layout.addWidget(title)
+
+        self.search_edit = QLineEdit()
+        self.search_edit.setObjectName("conversationDialogSearch")
+        self.search_edit.setPlaceholderText("输入名称进行搜索")
+        self.search_edit.setClearButtonEnabled(True)
+        self.search_edit.addAction(asset_icon("search.svg"), QLineEdit.ActionPosition.LeadingPosition)
+        self.search_edit.textChanged.connect(self._filter_choices)
+        layout.addWidget(self.search_edit)
+
+        self.choice_list = QListWidget()
+        self.choice_list.setObjectName("conversationChoiceList")
+        self.choice_list.setAlternatingRowColors(True)
+        self.choice_list.itemDoubleClicked.connect(lambda _item: self._accept_selection())
+        layout.addWidget(self.choice_list, 1)
+        for name, data in choices:
+            item = QListWidgetItem(name)
+            item.setData(Qt.ItemDataRole.UserRole, data)
+            self.choice_list.addItem(item)
+            if data == selected_data:
+                self.choice_list.setCurrentItem(item)
+        if self.choice_list.currentItem() is None and self.choice_list.count():
+            self.choice_list.setCurrentRow(0)
+
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Cancel | QDialogButtonBox.StandardButton.Ok
+        )
+        self.select_button = buttons.button(QDialogButtonBox.StandardButton.Ok)
+        self.select_button.setText("选择")
+        self.select_button.setObjectName("dialogPrimary")
+        buttons.button(QDialogButtonBox.StandardButton.Cancel).setText("取消")
+        buttons.accepted.connect(self._accept_selection)
+        buttons.rejected.connect(self.reject)
+        layout.addWidget(buttons)
+        self.search_edit.setFocus()
+
+    def _filter_choices(self, query: str) -> None:
+        folded = query.strip().casefold()
+        first_visible: QListWidgetItem | None = None
+        for index in range(self.choice_list.count()):
+            item = self.choice_list.item(index)
+            visible = not folded or folded in item.text().casefold()
+            item.setHidden(not visible)
+            if visible and first_visible is None:
+                first_visible = item
+        current = self.choice_list.currentItem()
+        if current is None or current.isHidden():
+            self.choice_list.setCurrentItem(first_visible)
+        self.select_button.setEnabled(first_visible is not None)
+
+    def _accept_selection(self) -> None:
+        current = self.choice_list.currentItem()
+        if current is not None and not current.isHidden():
+            self.accept()
+
+    def selected_data(self) -> object | None:
+        current = self.choice_list.currentItem()
+        return current.data(Qt.ItemDataRole.UserRole) if current is not None else None
+
+
+class DatePickerDialog(QDialog):
+    def __init__(
+        self,
+        title: str,
+        selected: QDate,
+        minimum: QDate,
+        maximum: QDate,
+        parent: QWidget | None = None,
+    ) -> None:
+        super().__init__(parent)
+        self.setObjectName("datePickerDialog")
+        self.setWindowTitle(title)
+        self.setModal(True)
+        self.setFixedSize(390, 430)
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(20, 18, 20, 18)
+        layout.setSpacing(12)
+        heading = QLabel(title)
+        heading.setObjectName("dialogTitle")
+        layout.addWidget(heading)
+
+        navigation = QHBoxLayout()
+        navigation.setSpacing(8)
+        self.previous_button = QToolButton()
+        self.next_button = QToolButton()
+        for button in (self.previous_button, self.next_button):
+            button.setObjectName("calendarNavButton")
+            button.setFixedSize(34, 34)
+        self.previous_button.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_ArrowLeft))
+        self.next_button.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_ArrowRight))
+        self.month_label = QLabel()
+        self.month_label.setObjectName("calendarMonthLabel")
+        self.month_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        navigation.addWidget(self.previous_button)
+        navigation.addWidget(self.month_label, 1)
+        navigation.addWidget(self.next_button)
+        layout.addLayout(navigation)
+
+        self.calendar = QCalendarWidget()
+        self.calendar.setObjectName("rangeCalendar")
+        self.calendar.setNavigationBarVisible(False)
+        self.calendar.setGridVisible(False)
+        self.calendar.setFirstDayOfWeek(Qt.DayOfWeek.Monday)
+        self.calendar.setHorizontalHeaderFormat(QCalendarWidget.HorizontalHeaderFormat.ShortDayNames)
+        self.calendar.setVerticalHeaderFormat(QCalendarWidget.VerticalHeaderFormat.NoVerticalHeader)
+        self.calendar.setMinimumDate(minimum)
+        self.calendar.setMaximumDate(maximum)
+        self.calendar.setSelectedDate(selected)
+        self.calendar.setCurrentPage(selected.year(), selected.month())
+        weekend = QTextCharFormat()
+        weekend.setForeground(QColor("#c45d16"))
+        self.calendar.setWeekdayTextFormat(Qt.DayOfWeek.Saturday, weekend)
+        self.calendar.setWeekdayTextFormat(Qt.DayOfWeek.Sunday, weekend)
+        self.calendar.currentPageChanged.connect(self._update_month)
+        self.calendar.activated.connect(lambda _date: self.accept())
+        layout.addWidget(self.calendar, 1)
+
+        footer = QHBoxLayout()
+        self.today_button = QPushButton("今天")
+        cancel_button = QPushButton("取消")
+        confirm_button = QPushButton("确定")
+        confirm_button.setObjectName("dialogPrimary")
+        footer.addWidget(self.today_button)
+        footer.addStretch(1)
+        footer.addWidget(cancel_button)
+        footer.addWidget(confirm_button)
+        layout.addLayout(footer)
+
+        self.previous_button.clicked.connect(lambda: self._change_month(-1))
+        self.next_button.clicked.connect(lambda: self._change_month(1))
+        self.today_button.clicked.connect(self._select_today)
+        cancel_button.clicked.connect(self.reject)
+        confirm_button.clicked.connect(self.accept)
+        self._update_month(selected.year(), selected.month())
+
+    def _change_month(self, offset: int) -> None:
+        current = QDate(self.calendar.yearShown(), self.calendar.monthShown(), 1)
+        target = current.addMonths(offset)
+        self.calendar.setCurrentPage(target.year(), target.month())
+
+    def _select_today(self) -> None:
+        today = QDate.currentDate()
+        if self.calendar.minimumDate() <= today <= self.calendar.maximumDate():
+            self.calendar.setSelectedDate(today)
+            self.calendar.setCurrentPage(today.year(), today.month())
+
+    def _update_month(self, year: int, month: int) -> None:
+        self.month_label.setText(f"{year} 年 {month} 月")
+        current = QDate(year, month, 1)
+        minimum = QDate(self.calendar.minimumDate().year(), self.calendar.minimumDate().month(), 1)
+        maximum = QDate(self.calendar.maximumDate().year(), self.calendar.maximumDate().month(), 1)
+        self.previous_button.setEnabled(current > minimum)
+        self.next_button.setEnabled(current < maximum)
+
+    def selected_date(self) -> QDate:
+        return self.calendar.selectedDate()
+
+
 class MainWindow(QMainWindow):
     def __init__(self) -> None:
         super().__init__()
@@ -304,23 +494,20 @@ class MainWindow(QMainWindow):
         side_layout.addWidget(_section_label("记忆范围", "02"))
         side_layout.addWidget(_field_label("联系人 / 群聊"))
         self.conversation_combo = QComboBox()
-        self.conversation_combo.setEditable(True)
-        self.conversation_combo.setInsertPolicy(QComboBox.InsertPolicy.NoInsert)
-        conversation_search = self.conversation_combo.lineEdit()
-        conversation_search.setPlaceholderText("搜索联系人或群聊")
-        conversation_search.setClearButtonEnabled(True)
-        conversation_search.addAction(
-            asset_icon("search.svg"),
-            QLineEdit.ActionPosition.LeadingPosition,
-        )
-        conversation_search.textEdited.connect(self._conversation_search_edited)
-        completer = self.conversation_combo.completer()
-        completer.setCaseSensitivity(Qt.CaseSensitivity.CaseInsensitive)
-        completer.setFilterMode(Qt.MatchFlag.MatchContains)
-        completer.setCompletionMode(QCompleter.CompletionMode.PopupCompletion)
-        completer.activated[str].connect(self._conversation_completion_selected)
+        self.conversation_combo.setPlaceholderText("选择联系人或群聊")
         self.conversation_combo.currentIndexChanged.connect(self._conversation_changed)
-        side_layout.addWidget(self.conversation_combo)
+        self.conversation_search_button = QToolButton()
+        self.conversation_search_button.setObjectName("scopeSearchButton")
+        self.conversation_search_button.setIcon(asset_icon("search.svg"))
+        self.conversation_search_button.setToolTip("搜索联系人或群聊")
+        self.conversation_search_button.setFixedSize(40, 40)
+        self.conversation_search_button.setEnabled(False)
+        self.conversation_search_button.clicked.connect(self._open_conversation_search)
+        conversation_layout = QHBoxLayout()
+        conversation_layout.setSpacing(8)
+        conversation_layout.addWidget(self.conversation_combo, 1)
+        conversation_layout.addWidget(self.conversation_search_button)
+        side_layout.addLayout(conversation_layout)
         side_layout.addWidget(_field_label("时间范围"))
         self.start_date = QDateEdit()
         self.end_date = QDateEdit()
@@ -349,26 +536,23 @@ class MainWindow(QMainWindow):
             lambda: self._show_date_calendar(self.end_date, self.end_calendar_button)
         )
 
-        start_picker = QWidget()
-        start_picker_layout = QHBoxLayout(start_picker)
-        start_picker_layout.setContentsMargins(0, 0, 0, 0)
-        start_picker_layout.setSpacing(0)
-        start_picker_layout.addWidget(self.start_date, 1)
-        start_picker_layout.addWidget(self.start_calendar_button)
-        end_picker = QWidget()
-        end_picker_layout = QHBoxLayout(end_picker)
-        end_picker_layout.setContentsMargins(0, 0, 0, 0)
-        end_picker_layout.setSpacing(0)
-        end_picker_layout.addWidget(self.end_date, 1)
-        end_picker_layout.addWidget(self.end_calendar_button)
         date_layout = QHBoxLayout()
-        date_layout.setSpacing(8)
-        date_layout.addWidget(start_picker, 1)
-        range_dash = QLabel("—")
-        range_dash.setObjectName("rangeDash")
-        range_dash.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        date_layout.addWidget(range_dash)
-        date_layout.addWidget(end_picker, 1)
+        date_layout.setSpacing(12)
+        for caption, date_edit, button in (
+            ("开始", self.start_date, self.start_calendar_button),
+            ("结束", self.end_date, self.end_calendar_button),
+        ):
+            picker_layout = QVBoxLayout()
+            picker_layout.setSpacing(3)
+            picker_label = QLabel(caption)
+            picker_label.setObjectName("dateCaption")
+            picker_layout.addWidget(picker_label)
+            field_layout = QHBoxLayout()
+            field_layout.setSpacing(0)
+            field_layout.addWidget(date_edit, 1)
+            field_layout.addWidget(button)
+            picker_layout.addLayout(field_layout)
+            date_layout.addLayout(picker_layout, 1)
         side_layout.addLayout(date_layout)
 
         metrics_layout = QHBoxLayout()
@@ -519,6 +703,7 @@ class MainWindow(QMainWindow):
         if self._source is not None:
             self._close_source()
             self.conversation_combo.clear()
+            self.conversation_search_button.setEnabled(False)
             self.preview_table.setRowCount(0)
             self.preview_summary.setText("暂无消息")
             self.export_button.setEnabled(False)
@@ -571,7 +756,10 @@ class MainWindow(QMainWindow):
         self.conversation_combo.clear()
         for conversation in source.list_conversations():
             self.conversation_combo.addItem(conversation.name, conversation.id)
+        if self.conversation_combo.count():
+            self.conversation_combo.setCurrentIndex(0)
         self.conversation_combo.blockSignals(False)
+        self.conversation_search_button.setEnabled(self.conversation_combo.count() > 0)
         self.image_key_button.setEnabled(isinstance(source, WeChat4LocalSource))
         self._set_busy(False)
         self.progress.setRange(0, 4)
@@ -590,17 +778,17 @@ class MainWindow(QMainWindow):
         self.status_label.setText("连接失败")
         QMessageBox.critical(self, "无法连接数据", error)
 
-    def _conversation_search_edited(self, text: str) -> None:
-        index = self.conversation_combo.currentIndex()
-        if index >= 0 and self.conversation_combo.itemText(index) != text:
-            self.conversation_combo.blockSignals(True)
-            self.conversation_combo.setCurrentIndex(-1)
-            self.conversation_combo.setEditText(text)
-            self.conversation_combo.blockSignals(False)
-        self.export_button.setEnabled(False)
-
-    def _conversation_completion_selected(self, text: str) -> None:
-        index = self.conversation_combo.findText(text, Qt.MatchFlag.MatchExactly)
+    def _open_conversation_search(self) -> None:
+        if self.conversation_combo.count() == 0:
+            return
+        choices = [
+            (self.conversation_combo.itemText(index), self.conversation_combo.itemData(index))
+            for index in range(self.conversation_combo.count())
+        ]
+        dialog = ConversationSearchDialog(choices, self.conversation_combo.currentData(), self)
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+        index = self.conversation_combo.findData(dialog.selected_data())
         if index >= 0:
             self.conversation_combo.setCurrentIndex(index)
 
@@ -611,6 +799,7 @@ class MainWindow(QMainWindow):
         self.preview_table.setRowCount(0)
         self.export_button.setEnabled(False)
         self.conversation_combo.setEnabled(False)
+        self.conversation_search_button.setEnabled(False)
         self.status_label.setText("正在读取消息...")
         self.progress.setRange(0, 0)
         self._message_worker = MessageLoadWorker(self._source, str(self.conversation_combo.currentData()))
@@ -621,6 +810,7 @@ class MainWindow(QMainWindow):
     def _messages_loaded(self, messages: list[Message]) -> None:
         self._messages = messages
         self.conversation_combo.setEnabled(True)
+        self.conversation_search_button.setEnabled(True)
         self.progress.setRange(0, 4)
         self.progress.setValue(4)
         if messages:
@@ -640,6 +830,7 @@ class MainWindow(QMainWindow):
 
     def _messages_failed(self, error: str) -> None:
         self.conversation_combo.setEnabled(True)
+        self.conversation_search_button.setEnabled(True)
         self.progress.setRange(0, 4)
         self.progress.setValue(0)
         if self._closing:
@@ -817,6 +1008,9 @@ class MainWindow(QMainWindow):
         self.source_mode.setEnabled(not busy)
         self.source_edit.setEnabled(not busy)
         self.source_browse_button.setEnabled(not busy)
+        self.conversation_search_button.setEnabled(
+            not busy and self._source is not None and self.conversation_combo.count() > 0
+        )
         self.export_button.setEnabled(
             not busy and self._source is not None and self.conversation_combo.currentIndex() >= 0
         )
@@ -856,33 +1050,17 @@ class MainWindow(QMainWindow):
             self.start_date.blockSignals(False)
         self._refresh_preview()
 
-    def _create_calendar_menu(self, date_edit: QDateEdit) -> tuple[QMenu, QCalendarWidget]:
-        menu = QMenu(self)
-        menu.setObjectName("calendarMenu")
-        calendar = QCalendarWidget(menu)
-        calendar.setObjectName("rangeCalendar")
-        calendar.setMinimumSize(320, 260)
-        calendar.setGridVisible(True)
-        calendar.setFirstDayOfWeek(Qt.DayOfWeek.Monday)
-        calendar.setHorizontalHeaderFormat(QCalendarWidget.HorizontalHeaderFormat.ShortDayNames)
-        calendar.setVerticalHeaderFormat(QCalendarWidget.VerticalHeaderFormat.NoVerticalHeader)
-        calendar.setMinimumDate(date_edit.minimumDate())
-        calendar.setMaximumDate(date_edit.maximumDate())
-        calendar.setSelectedDate(date_edit.date())
-        action = QWidgetAction(menu)
-        action.setDefaultWidget(calendar)
-        menu.addAction(action)
-
-        def select_date(selected: QDate) -> None:
-            date_edit.setDate(selected)
-            menu.close()
-
-        calendar.clicked.connect(select_date)
-        return menu, calendar
-
-    def _show_date_calendar(self, date_edit: QDateEdit, anchor: QToolButton) -> None:
-        menu, _calendar = self._create_calendar_menu(date_edit)
-        menu.exec(anchor.mapToGlobal(anchor.rect().bottomLeft()))
+    def _show_date_calendar(self, date_edit: QDateEdit, _anchor: QToolButton) -> None:
+        title = "选择开始日期" if date_edit is self.start_date else "选择结束日期"
+        dialog = DatePickerDialog(
+            title,
+            date_edit.date(),
+            date_edit.minimumDate(),
+            date_edit.maximumDate(),
+            self,
+        )
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            date_edit.setDate(dialog.selected_date())
 
     def _restore_settings(self) -> None:
         mode = "wechat"
@@ -1028,9 +1206,10 @@ QLabel#metricCaption {
     color: #7a847f;
     font-size: 10px;
 }
-QLabel#rangeDash {
-    color: #8a948f;
-    min-width: 12px;
+QLabel#dateCaption {
+    color: #7a847f;
+    font-size: 10px;
+    font-weight: 600;
 }
 QLabel#workspaceTitle {
     color: #17211c;
@@ -1063,11 +1242,6 @@ QLineEdit#searchField {
     background: #ffffff;
     padding-left: 12px;
 }
-QComboBox QLineEdit {
-    border: 0;
-    background: transparent;
-    padding: 0;
-}
 QDateEdit#dateInput {
     border-top-right-radius: 0;
     border-bottom-right-radius: 0;
@@ -1085,6 +1259,16 @@ QToolButton#calendarButton:hover {
     background: #f0f4f2;
     border-color: #9eada5;
 }
+QToolButton#scopeSearchButton {
+    background: #ffffff;
+    border: 1px solid #ced7d2;
+    border-radius: 6px;
+    padding: 9px;
+}
+QToolButton#scopeSearchButton:hover {
+    background: #f0f4f2;
+    border-color: #9eada5;
+}
 QComboBox::drop-down, QDateEdit::drop-down {
     border: 0;
     width: 26px;
@@ -1096,25 +1280,66 @@ QComboBox QAbstractItemView {
     selection-color: #17211c;
     padding: 4px;
 }
-QMenu#calendarMenu {
+QDialog#conversationSearchDialog, QDialog#datePickerDialog {
+    background: #f8faf9;
+}
+QLabel#dialogTitle {
+    color: #17211c;
+    font-size: 18px;
+    font-weight: 700;
+}
+QLabel#calendarMonthLabel {
+    color: #27322c;
+    font-size: 15px;
+    font-weight: 700;
+}
+QListWidget#conversationChoiceList {
     background: #ffffff;
-    border: 1px solid #ced7d2;
+    alternate-background-color: #f8faf9;
+    border: 1px solid #dce3df;
+    border-radius: 6px;
     padding: 4px;
+    outline: 0;
+}
+QListWidget#conversationChoiceList::item {
+    min-height: 38px;
+    padding: 0 10px;
+    border-radius: 4px;
+}
+QListWidget#conversationChoiceList::item:selected {
+    color: #087f4f;
+    background: #e5f7ed;
+}
+QToolButton#calendarNavButton {
+    background: #ffffff;
+    border: 1px solid #d7dfdb;
+    border-radius: 5px;
+    padding: 7px;
+}
+QToolButton#calendarNavButton:hover {
+    background: #eef5f1;
+    border-color: #9eada5;
 }
 QCalendarWidget#rangeCalendar {
     background: #ffffff;
+    border: 1px solid #dce3df;
+    border-radius: 6px;
 }
 QCalendarWidget#rangeCalendar QAbstractItemView:enabled {
     color: #27322c;
     background: #ffffff;
     selection-background-color: #07c160;
     selection-color: #ffffff;
+    outline: 0;
 }
-QCalendarWidget#rangeCalendar QToolButton {
-    color: #27322c;
-    background: #ffffff;
-    border: 0;
-    min-height: 30px;
+QPushButton#dialogPrimary {
+    background: #07c160;
+    color: #ffffff;
+    border-color: #07c160;
+}
+QPushButton#dialogPrimary:hover {
+    background: #06ad56;
+    border-color: #06ad56;
 }
 QPushButton {
     min-height: 38px;

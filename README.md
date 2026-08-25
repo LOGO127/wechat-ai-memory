@@ -12,7 +12,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/LOGO127/wechat-ai-memory/releases/tag/v0.3.4-alpha"><img alt="Release" src="https://img.shields.io/badge/release-v0.3.4--alpha-07a85b?style=flat-square"></a>
+  <a href="https://github.com/LOGO127/wechat-ai-memory/releases/tag/v0.3.5-alpha"><img alt="Release" src="https://img.shields.io/badge/release-v0.3.5--alpha-07a85b?style=flat-square"></a>
   <img alt="Platform" src="https://img.shields.io/badge/platform-Windows%2010%20%7C%2011-2563eb?style=flat-square">
   <a href="https://github.com/LOGO127/wechat-ai-memory/actions/workflows/test.yml"><img alt="Tests" src="https://github.com/LOGO127/wechat-ai-memory/actions/workflows/test.yml/badge.svg"></a>
   <a href="LICENSE"><img alt="License" src="https://img.shields.io/badge/license-MIT-17211c?style=flat-square"></a>
@@ -36,7 +36,7 @@
 <p align="center"><sub>连接微信 → 读取图片 → 选择记忆范围 → 关键词筛选 → 生成档案 → 查看实际 PDF。点击动画观看高清版本。</sub></p>
 
 > [!IMPORTANT]
-> 当前为 `v0.3.4-alpha` 私人测试版。本机微信读取已在 Windows 微信 4.x 上验证，但微信升级可能改变内部数据格式。首次使用前建议备份重要数据。
+> 当前为 `v0.3.5-alpha` 私人测试版。本机微信读取已在 Windows 微信 4.x 上验证，但微信升级可能改变内部数据格式。首次使用前建议备份重要数据。
 
 ## 为什么做这个项目
 
@@ -62,7 +62,7 @@
 
 ### Windows 软件包
 
-从 [v0.3.4-alpha Release](https://github.com/LOGO127/wechat-ai-memory/releases/tag/v0.3.4-alpha) 选择一种方式：
+从 [v0.3.5-alpha Release](https://github.com/LOGO127/wechat-ai-memory/releases/tag/v0.3.5-alpha) 选择一种方式：
 
 | 下载文件 | 使用方式 | 适合场景 |
 | --- | --- | --- |

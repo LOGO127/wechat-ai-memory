@@ -87,6 +87,15 @@ def run_smoke(executable: Path, fixture: Path, output: Path) -> dict[str, object
         source_edit.set_edit_text(str(fixture))
         window.child_window(title="加载", control_type="Button").invoke()
         _wait_for(lambda: "消息读取完成" in _text_names(window), "message loading")
+        conversation_combo = sorted(
+            window.descendants(control_type="ComboBox"),
+            key=lambda item: item.rectangle().top,
+        )[1]
+        if conversation_combo.selected_text() != "ECO 项目讨论群":
+            raise RuntimeError(
+                "Packaged application did not preserve the selected conversation: "
+                f"{conversation_combo.selected_text()!r}"
+            )
 
         search = window.child_window(
             auto_id="QApplication.MainWindow.appRoot.mainSplitter.workspace.searchField",
