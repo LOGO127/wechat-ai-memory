@@ -30,12 +30,14 @@ from PySide6.QtWidgets import (
     QHeaderView,
     QLabel,
     QLineEdit,
+    QLayout,
     QListWidget,
     QListWidgetItem,
     QMainWindow,
     QMessageBox,
     QProgressBar,
     QPushButton,
+    QScrollArea,
     QSplitter,
     QStyle,
     QTableWidget,
@@ -189,10 +191,10 @@ def _separator() -> QFrame:
 def _metric(caption: str) -> tuple[QWidget, QLabel]:
     widget = QWidget()
     widget.setObjectName("metricBlock")
-    widget.setFixedHeight(52)
+    widget.setFixedHeight(46)
     layout = QVBoxLayout(widget)
     layout.setContentsMargins(6, 3, 6, 3)
-    layout.setSpacing(1)
+    layout.setSpacing(0)
     value = QLabel("0")
     value.setObjectName("metricValue")
     value.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -446,9 +448,20 @@ class MainWindow(QMainWindow):
         sidebar.setObjectName("sidebar")
         sidebar.setMinimumWidth(318)
         sidebar.setMaximumWidth(390)
-        side_layout = QVBoxLayout(sidebar)
-        side_layout.setContentsMargins(22, 20, 22, 18)
-        side_layout.setSpacing(5)
+        sidebar_layout = QVBoxLayout(sidebar)
+        sidebar_layout.setContentsMargins(0, 0, 0, 0)
+        sidebar_layout.setSpacing(0)
+        form_scroll = QScrollArea()
+        form_scroll.setObjectName("sidebarScroll")
+        form_scroll.setWidgetResizable(True)
+        form_scroll.setFrameShape(QFrame.Shape.NoFrame)
+        form_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        sidebar_form = QWidget()
+        sidebar_form.setObjectName("sidebarForm")
+        side_layout = QVBoxLayout(sidebar_form)
+        side_layout.setContentsMargins(22, 10, 16, 4)
+        side_layout.setSpacing(4)
+        side_layout.setSizeConstraint(QLayout.SizeConstraint.SetMinimumSize)
 
         side_layout.addWidget(_section_label("数据源", "01"))
         side_layout.addWidget(_field_label("来源类型"))
@@ -515,6 +528,7 @@ class MainWindow(QMainWindow):
             date_edit.setDisplayFormat("yyyy-MM-dd")
             date_edit.setDate(QDate.currentDate())
             date_edit.setButtonSymbols(QAbstractSpinBox.ButtonSymbols.NoButtons)
+            date_edit.setAlignment(Qt.AlignmentFlag.AlignCenter)
             date_edit.setObjectName("dateInput")
         self.start_date.dateChanged.connect(self._start_date_changed)
         self.end_date.dateChanged.connect(self._end_date_changed)
@@ -555,17 +569,30 @@ class MainWindow(QMainWindow):
             date_layout.addLayout(picker_layout, 1)
         side_layout.addLayout(date_layout)
 
-        metrics_layout = QHBoxLayout()
+        date_metrics_gap = QWidget()
+        date_metrics_gap.setFixedHeight(8)
+        side_layout.addWidget(date_metrics_gap)
+        self.metrics_panel = QFrame()
+        self.metrics_panel.setObjectName("metricsPanel")
+        self.metrics_panel.setFixedHeight(48)
+        metrics_layout = QHBoxLayout(self.metrics_panel)
+        metrics_layout.setContentsMargins(0, 0, 0, 0)
         metrics_layout.setSpacing(0)
         message_metric, self.message_metric = _metric("消息")
         image_metric, self.image_metric = _metric("图片")
         day_metric, self.day_metric = _metric("活跃日")
-        metrics_layout.addWidget(message_metric, 1)
-        metrics_layout.addWidget(image_metric, 1)
-        metrics_layout.addWidget(day_metric, 1)
-        side_layout.addLayout(metrics_layout)
+        for index, metric in enumerate((message_metric, image_metric, day_metric)):
+            if index:
+                divider = QFrame()
+                divider.setObjectName("metricDivider")
+                divider.setFixedWidth(1)
+                metrics_layout.addWidget(divider)
+            metrics_layout.addWidget(metric, 1)
+        side_layout.addWidget(self.metrics_panel)
 
-        side_layout.addSpacing(20)
+        metrics_archive_gap = QWidget()
+        metrics_archive_gap.setFixedHeight(12)
+        side_layout.addWidget(metrics_archive_gap)
         self.archive_section = _section_label("归档设置", "03")
         side_layout.addWidget(self.archive_section)
         side_layout.addWidget(_field_label("PDF 文件"))
@@ -602,8 +629,16 @@ class MainWindow(QMainWindow):
         self.export_button.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_DialogSaveButton))
         self.export_button.setEnabled(False)
         self.export_button.clicked.connect(self._start_export)
-        side_layout.addWidget(self.open_folder_button)
-        side_layout.addWidget(self.export_button)
+        form_scroll.setWidget(sidebar_form)
+        sidebar_layout.addWidget(form_scroll, 1)
+        sidebar_actions = QWidget()
+        sidebar_actions.setObjectName("sidebarActions")
+        sidebar_actions_layout = QVBoxLayout(sidebar_actions)
+        sidebar_actions_layout.setContentsMargins(22, 8, 22, 10)
+        sidebar_actions_layout.setSpacing(5)
+        sidebar_actions_layout.addWidget(self.open_folder_button)
+        sidebar_actions_layout.addWidget(self.export_button)
+        sidebar_layout.addWidget(sidebar_actions)
 
         workspace = QWidget()
         workspace.setObjectName("workspace")
@@ -1161,6 +1196,11 @@ QFrame#sidebar {
     background: #fafcfb;
     border-right: 1px solid #dfe5e1;
 }
+QScrollArea#sidebarScroll, QScrollArea#sidebarScroll > QWidget > QWidget,
+QWidget#sidebarForm, QWidget#sidebarActions {
+    background: #fafcfb;
+    border: 0;
+}
 QWidget#workspace {
     background: #f6f8f7;
 }
@@ -1181,6 +1221,30 @@ QLabel#sectionTitle {
     font-size: 13px;
     font-weight: 700;
 }
+QFrame#metricsPanel {
+    background: #f3f7f5;
+    border: 1px solid #dce5e0;
+    border-radius: 6px;
+}
+QWidget#metricBlock {
+    background: transparent;
+    border: 0;
+}
+QFrame#metricDivider {
+    background: #d8e2dd;
+    border: 0;
+    margin-top: 9px;
+    margin-bottom: 9px;
+}
+QLabel#metricValue {
+    color: #17211c;
+    font-size: 15px;
+    font-weight: 700;
+}
+QLabel#metricCaption {
+    color: #75817b;
+    font-size: 10px;
+}
 QLabel#fieldLabel {
     color: #64706a;
     font-size: 11px;
@@ -1193,22 +1257,9 @@ QFrame#separator {
     margin-top: 5px;
     margin-bottom: 5px;
 }
-QWidget#metricBlock {
-    background: #ffffff;
-    border: 1px solid #e0e6e2;
-}
-QLabel#metricValue {
-    color: #17211c;
-    font-size: 16px;
-    font-weight: 700;
-}
-QLabel#metricCaption {
-    color: #7a847f;
-    font-size: 10px;
-}
 QLabel#dateCaption {
-    color: #7a847f;
-    font-size: 10px;
+    color: #64706a;
+    font-size: 11px;
     font-weight: 600;
 }
 QLabel#workspaceTitle {

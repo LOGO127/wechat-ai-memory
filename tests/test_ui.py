@@ -8,7 +8,7 @@ from pathlib import Path
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PySide6.QtCore import QDate, QPoint, QSettings
-from PySide6.QtWidgets import QApplication, QLabel
+from PySide6.QtWidgets import QApplication
 
 from wechat_context_exporter.models import Message, MessageType
 from wechat_context_exporter.ui import main_window
@@ -115,21 +115,25 @@ def test_memory_workspace_search_and_metrics(monkeypatch) -> None:
     assert window.source_mode.geometry().bottom() < window.source_label.geometry().top()
     assert window.source_edit.geometry().bottom() < window.load_button.geometry().top()
     assert window.preview_table.rowCount() == 2
+    assert window.preview_summary.text() == "2 条消息"
     assert window.message_metric.text() == "2"
     assert window.image_metric.text() == "1"
     assert window.day_metric.text() == "2"
-    for metric in (window.message_metric, window.image_metric, window.day_metric):
-        assert metric.geometry().bottom() < metric.parentWidget().height()
-    metric_block = window.message_metric.parentWidget()
-    caption = metric_block.findChild(QLabel, "metricCaption")
-    caption_bottom = caption.mapTo(window, QPoint(0, caption.height())).y()
+    date_bottom = max(
+        window.start_calendar_button.mapTo(window, QPoint(0, window.start_calendar_button.height())).y(),
+        window.end_calendar_button.mapTo(window, QPoint(0, window.end_calendar_button.height())).y(),
+    )
+    metrics_top = window.metrics_panel.mapTo(window, QPoint(0, 0)).y()
+    metrics_bottom = window.metrics_panel.mapTo(window, QPoint(0, window.metrics_panel.height())).y()
     archive_top = window.archive_section.mapTo(window, QPoint(0, 0)).y()
-    assert archive_top - caption_bottom >= 12
+    assert metrics_top - date_bottom >= 8
+    assert archive_top - metrics_bottom >= 12
 
     window.search_edit.setText("workflow")
     app.processEvents()
 
     assert window.preview_table.rowCount() == 1
+    assert window.preview_summary.text() == "1 条匹配 · 当前范围 2 条"
     assert window.message_metric.text() == "1"
     window._image_reading_enabled = True
     window._messages_loaded(window._messages)
