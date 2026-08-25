@@ -185,6 +185,34 @@ def test_gui_loads_json_and_exports_the_visible_search_results(tmp_path, monkeyp
     window.close()
 
 
+def test_voice_messages_enable_local_transcription_action(tmp_path, monkeypatch) -> None:
+    app = QApplication.instance() or QApplication([])
+    monkeypatch.setattr(main_window, "discover_wechat4_accounts", lambda: [])
+    audio = tmp_path / "voice.silk"
+    audio.write_bytes(b"\x02#!SILK_V3\nvoice")
+    window = main_window.MainWindow()
+    messages = [
+        Message(
+            "voice-1",
+            "chat",
+            "张三",
+            datetime(2026, 8, 25, 9),
+            MessageType.VOICE,
+            "[语音消息 · 4 秒 · 待转写]",
+            audio_path=audio,
+            duration_ms=4000,
+        )
+    ]
+
+    window._messages_loaded(messages)
+    app.processEvents()
+
+    assert window.voice_button.isEnabled()
+    assert window.voice_button.text() == "转写语音（1）"
+    assert window.preview_table.item(0, 2).text() == "语音"
+    window.close()
+
+
 def _wait_until(app: QApplication, predicate, timeout: float = 5.0) -> None:
     deadline = time.monotonic() + timeout
     while not predicate():

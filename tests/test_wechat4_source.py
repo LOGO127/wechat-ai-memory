@@ -105,6 +105,31 @@ def test_local_source_lists_conversations_and_reads_messages(tmp_path, monkeypat
                 f'INSERT INTO "{table}" VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
                 (3, 103, 1_700_000_200, 3, 2, "", b"\x00" + image_id.encode(), 0),
             ),
+            (
+                f'INSERT INTO "{table}" VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+                (
+                    5,
+                    105,
+                    1_700_000_250,
+                    34,
+                    2,
+                    '<msg><voicemsg voicelength="6120" /></msg>',
+                    None,
+                    0,
+                ),
+            ),
+        ],
+    )
+    _create_database(
+        db_dir / "message" / "media_0.db",
+        [
+            ("CREATE TABLE Name2Id (user_name TEXT)", ()),
+            ("INSERT INTO Name2Id VALUES (?)", (peer,)),
+            (
+                "CREATE TABLE VoiceInfo (chat_name_id INTEGER, local_id INTEGER, svr_id INTEGER, voice_data BLOB)",
+                (),
+            ),
+            ("INSERT INTO VoiceInfo VALUES (?, ?, ?, ?)", (1, 5, 105, b"\x02#!SILK_V3\nfake")),
         ],
     )
     _create_database(
@@ -155,13 +180,18 @@ def test_local_source_lists_conversations_and_reads_messages(tmp_path, monkeypat
         MessageType.TEXT,
         MessageType.TEXT,
         MessageType.IMAGE,
+        MessageType.VOICE,
         MessageType.TEXT,
     ]
     assert messages[0].sender == "项目联系人"
     assert messages[1].sender == "我"
     assert messages[1].is_outgoing
     assert image_bytes == image_head + image_tail
-    assert messages[3].content == "第二分片消息"
-    assert result.message_count == 4
+    assert messages[3].content == "[语音消息 · 6 秒 · 待转写]"
+    assert messages[3].duration_ms == 6120
+    assert messages[3].voice_path is not None
+    assert messages[3].voice_path.read_bytes() == b"\x02#!SILK_V3\nfake"
+    assert messages[4].content == "第二分片消息"
+    assert result.message_count == 5
     assert result.image_page_count == 1
     assert pdf_page_count == result.page_count

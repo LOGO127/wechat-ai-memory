@@ -71,6 +71,21 @@ class JsonChatSource:
             content = _required_string(raw, "content")
             if message_type in {MessageType.IMAGE, MessageType.FILE} and content:
                 content = str((self.path.parent / content).resolve()) if not Path(content).is_absolute() else content
+            audio_path = raw.get("audio_path")
+            if audio_path is not None and not isinstance(audio_path, str):
+                raise TypeError("audio_path must be a string or null")
+            if audio_path:
+                audio_path = str(
+                    (self.path.parent / audio_path).resolve()
+                    if not Path(audio_path).is_absolute()
+                    else Path(audio_path)
+                )
+            duration_ms = raw.get("duration_ms")
+            if duration_ms is not None and (not isinstance(duration_ms, int) or duration_ms < 0):
+                raise TypeError("duration_ms must be a non-negative integer or null")
+            transcript = raw.get("transcript")
+            if transcript is not None and not isinstance(transcript, str):
+                raise TypeError("transcript must be a string or null")
             is_outgoing = raw.get("is_outgoing", False)
             if not isinstance(is_outgoing, bool):
                 raise TypeError("is_outgoing must be a boolean")
@@ -86,6 +101,9 @@ class JsonChatSource:
                 content=content,
                 is_outgoing=is_outgoing,
                 reply_to=reply_to,
+                audio_path=Path(audio_path) if audio_path else None,
+                duration_ms=duration_ms,
+                transcript=transcript,
             )
         except (KeyError, TypeError, ValueError) as exc:
             raise SourceError(f"Invalid message {index} in {conversation_id}: {exc}") from exc

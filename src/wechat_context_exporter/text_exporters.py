@@ -24,6 +24,9 @@ def export_markdown(conversation: Conversation, messages: Iterable[Message], out
             lines.append(f"![Image attachment]({target})")
         elif message.type is MessageType.FILE:
             lines.append(f"File attachment: `{message.content}`")
+        elif message.type is MessageType.VOICE:
+            duration = f" ({max(1, round(message.duration_ms / 1000))}s)" if message.duration_ms else ""
+            lines.append(f"Voice transcript{duration}: {message.content}")
         elif message.type is MessageType.SYSTEM:
             lines.append(f"_{message.content}_")
         else:
@@ -52,6 +55,9 @@ def export_json(conversation: Conversation, messages: Iterable[Message], output_
                         "content": message.content,
                         "is_outgoing": message.is_outgoing,
                         **({"reply_to": message.reply_to} if message.reply_to else {}),
+                        **({"audio_path": str(message.audio_path)} if message.audio_path else {}),
+                        **({"duration_ms": message.duration_ms} if message.duration_ms is not None else {}),
+                        **({"transcript": message.transcript} if message.transcript else {}),
                     }
                     for message in messages
                 ],

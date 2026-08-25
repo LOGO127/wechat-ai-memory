@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "wechat-context-exporter"
-version = "0.3.6"
+version = "0.3.7"
 description = "A local-first WeChat AI memory archive for Windows."
 readme = "README.md"
 requires-python = ">=3.11"
@@ -17,6 +17,8 @@ dependencies = [
   "pywinauto>=0.6.9,<1",
   "pycryptodome>=3.21,<4",
   "reportlab>=4.2,<5",
+  "faster-whisper>=1.2,<2",
+  "silk-python>=0.2.8,<0.3",
   "zstandard>=0.23,<1",
 ]
 

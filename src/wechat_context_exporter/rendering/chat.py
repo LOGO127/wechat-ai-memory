@@ -366,6 +366,10 @@ class ChatRenderer:
     def _display_content(message: Message) -> str:
         if message.type is MessageType.FILE:
             return f"File attachment: {Path(message.content).name}"
+        if message.type is MessageType.VOICE:
+            duration = f" · {max(1, round(message.duration_ms / 1000))} 秒" if message.duration_ms else ""
+            label = "语音转写" if message.transcript else "语音消息"
+            return f"{label}{duration}\n{message.content}"
         return message.content
 
 

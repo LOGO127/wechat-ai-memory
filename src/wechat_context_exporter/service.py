@@ -178,10 +178,17 @@ class ExportService:
         copied: dict[Path, Path] = {}
         materialized: list[Message] = []
         for index, message in enumerate(messages, start=1):
-            if message.type not in {MessageType.IMAGE, MessageType.FILE}:
+            if message.type not in {MessageType.IMAGE, MessageType.FILE, MessageType.VOICE}:
                 materialized.append(message)
                 continue
-            source = Path(message.content).expanduser().resolve()
+            if message.type is MessageType.VOICE and message.audio_path is None:
+                materialized.append(message)
+                continue
+            source = (
+                message.audio_path.expanduser().resolve()
+                if message.type is MessageType.VOICE and message.audio_path
+                else Path(message.content).expanduser().resolve()
+            )
             if not source.is_file():
                 materialized.append(message)
                 continue
@@ -194,7 +201,10 @@ class ExportService:
                 if source != target:
                     shutil.copy2(source, target)
                 copied[source] = target
-            materialized.append(replace(message, content=str(target)))
+            if message.type is MessageType.VOICE:
+                materialized.append(replace(message, audio_path=target))
+            else:
+                materialized.append(replace(message, content=str(target)))
         return materialized
 
     @staticmethod
@@ -202,10 +212,13 @@ class ExportService:
         output_dir = output_path.expanduser().resolve().parent
         relative: list[Message] = []
         for message in messages:
-            if message.type not in {MessageType.IMAGE, MessageType.FILE}:
+            if message.type not in {MessageType.IMAGE, MessageType.FILE, MessageType.VOICE}:
                 relative.append(message)
                 continue
-            content = Path(message.content)
+            content = message.audio_path if message.type is MessageType.VOICE else Path(message.content)
+            if content is None:
+                relative.append(message)
+                continue
             if not content.is_absolute():
                 relative.append(message)
                 continue
@@ -213,7 +226,10 @@ class ExportService:
                 portable = Path(os.path.relpath(content, output_dir)).as_posix()
             except ValueError:
                 portable = content.as_posix()
-            relative.append(replace(message, content=portable))
+            if message.type is MessageType.VOICE:
+                relative.append(replace(message, audio_path=Path(portable)))
+            else:
+                relative.append(replace(message, content=portable))
         return relative
 
     @staticmethod

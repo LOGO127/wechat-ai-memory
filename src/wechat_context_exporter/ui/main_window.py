@@ -50,6 +50,7 @@ from PySide6.QtWidgets import (
 from ..models import Message, MessageType
 from ..rendering.fonts import FontBook
 from ..service import ExportOptions, ExportResult, ExportService
+from ..voice import VoiceTranscriber
 from ..sources import (
     ChatSource,
     JsonChatSource,
@@ -138,6 +139,28 @@ class ImageKeyWorker(QThread):
             self.failed.emit(str(exc))
             return
         self.completed.emit(key)
+
+
+class VoiceTranscriptionWorker(QThread):
+    progress = Signal(int, int, str)
+    completed = Signal(object)
+    failed = Signal(str)
+
+    def __init__(self, messages: list[Message]) -> None:
+        super().__init__()
+        self.messages = messages
+
+    def run(self) -> None:
+        try:
+            messages = VoiceTranscriber().transcribe_messages(
+                self.messages,
+                progress=self.progress.emit,
+                cancelled=self.isInterruptionRequested,
+            )
+        except Exception as exc:  # Qt worker boundary.
+            self.failed.emit(str(exc))
+            return
+        self.completed.emit(messages)
 
 
 class ExportWorker(QThread):
@@ -395,6 +418,7 @@ class MainWindow(QMainWindow):
         self._source_worker: SourceLoadWorker | None = None
         self._message_worker: MessageLoadWorker | None = None
         self._image_worker: ImageKeyWorker | None = None
+        self._voice_worker: VoiceTranscriptionWorker | None = None
         self._export_worker: ExportWorker | None = None
         self._last_result: ExportResult | None = None
         self._image_reading_enabled = False
@@ -662,6 +686,13 @@ class MainWindow(QMainWindow):
         self.search_edit.setClearButtonEnabled(True)
         self.search_edit.setFixedWidth(300)
         self.search_edit.textChanged.connect(self._refresh_preview)
+        self.voice_button = QPushButton("转写语音")
+        self.voice_button.setObjectName("voiceButton")
+        self.voice_button.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_MediaVolume))
+        self.voice_button.setToolTip("使用本地模型将当前会话的语音转成文字")
+        self.voice_button.setEnabled(False)
+        self.voice_button.clicked.connect(self._start_voice_transcription)
+        preview_header.addWidget(self.voice_button)
         preview_header.addWidget(self.search_edit)
         preview_layout.addLayout(preview_header)
 
@@ -832,6 +863,8 @@ class MainWindow(QMainWindow):
             return
         self._messages = []
         self.preview_table.setRowCount(0)
+        self.voice_button.setEnabled(False)
+        self.voice_button.setText("转写语音")
         self.export_button.setEnabled(False)
         self.conversation_combo.setEnabled(False)
         self.conversation_search_button.setEnabled(False)
@@ -860,6 +893,7 @@ class MainWindow(QMainWindow):
         status = "图片读取已启用 · 消息读取完成" if self._image_reading_enabled else "消息读取完成"
         self.status_label.setText(status)
         self.export_button.setEnabled(True)
+        self._update_voice_button()
         self._suggest_output_path()
         self._refresh_preview()
 
@@ -874,9 +908,74 @@ class MainWindow(QMainWindow):
         self.export_button.setEnabled(False)
         QMessageBox.critical(self, "无法读取消息", error)
 
+    def _update_voice_button(self) -> None:
+        voices = [
+            message
+            for message in self._messages_in_selected_range()
+            if message.type is MessageType.VOICE
+        ]
+        available = [message for message in voices if message.voice_path and message.voice_path.is_file()]
+        pending = [message for message in available if not message.transcript]
+        if pending:
+            self.voice_button.setText(f"转写语音（{len(pending)}）")
+            self.voice_button.setToolTip("使用本地模型转写当前会话中尚未识别的语音")
+        elif voices and available:
+            self.voice_button.setText("语音已转写")
+            self.voice_button.setToolTip("当前会话中可读取的语音均已有文字")
+        elif voices:
+            self.voice_button.setText("语音不可读")
+            self.voice_button.setToolTip("没有在本机微信数据库中找到对应的语音数据")
+        else:
+            self.voice_button.setText("转写语音")
+            self.voice_button.setToolTip("当前会话没有语音消息")
+        self.voice_button.setEnabled(bool(pending))
+
+    def _start_voice_transcription(self) -> None:
+        if self._voice_worker is not None and self._voice_worker.isRunning():
+            return
+        pending = [
+            message
+            for message in self._messages_in_selected_range()
+            if message.type is MessageType.VOICE
+            and message.voice_path
+            and message.voice_path.is_file()
+            and not message.transcript
+        ]
+        if not pending:
+            return
+        self._set_busy(True)
+        self.progress.setRange(0, len(pending))
+        self.progress.setValue(0)
+        self.status_label.setText("正在准备本地语音模型，首次使用需要下载一次...")
+        self._voice_worker = VoiceTranscriptionWorker(self._messages_in_selected_range())
+        self._voice_worker.progress.connect(self._operation_progress)
+        self._voice_worker.completed.connect(self._voice_transcription_completed)
+        self._voice_worker.failed.connect(self._voice_transcription_failed)
+        self._voice_worker.start()
+
+    def _voice_transcription_completed(self, messages: list[Message]) -> None:
+        updates = {message.id: message for message in messages}
+        self._messages = [updates.get(message.id, message) for message in self._messages]
+        self._set_busy(False)
+        self.progress.setRange(0, 4)
+        self.progress.setValue(4)
+        count = sum(message.type is MessageType.VOICE and bool(message.transcript) for message in messages)
+        self.status_label.setText(f"语音转写完成 · {count} 条已有文字")
+        self._update_voice_button()
+        self._refresh_preview()
+
+    def _voice_transcription_failed(self, error: str) -> None:
+        self._set_busy(False)
+        self.progress.setRange(0, 4)
+        self.progress.setValue(0)
+        self._update_voice_button()
+        if self._closing:
+            return
+        self.status_label.setText("语音转写失败")
+        QMessageBox.critical(self, "无法转写语音", error)
+
     def _refresh_preview(self) -> None:
-        start, end = self._selected_range()
-        ranged_messages = [message for message in self._messages if start <= message.timestamp <= end]
+        ranged_messages = self._messages_in_selected_range()
         query = self.search_edit.text().strip().casefold()
         if query:
             messages = [
@@ -894,12 +993,14 @@ class MainWindow(QMainWindow):
             MessageType.TEXT: "文本",
             MessageType.IMAGE: "图片",
             MessageType.FILE: "文件",
+            MessageType.VOICE: "语音",
             MessageType.SYSTEM: "系统",
         }
         type_colors = {
             MessageType.TEXT: "#087f4f",
             MessageType.IMAGE: "#c45d16",
             MessageType.FILE: "#2563a6",
+            MessageType.VOICE: "#8b5e16",
             MessageType.SYSTEM: "#6b7280",
         }
         for row, message in enumerate(visible):
@@ -938,6 +1039,10 @@ class MainWindow(QMainWindow):
         self.message_metric.setText(f"{len(messages):,}")
         self.image_metric.setText(f"{sum(message.type is MessageType.IMAGE for message in messages):,}")
         self.day_metric.setText(f"{len({message.timestamp.date() for message in messages}):,}")
+
+    def _messages_in_selected_range(self) -> list[Message]:
+        start, end = self._selected_range()
+        return [message for message in self._messages if start <= message.timestamp <= end]
 
     def _load_image_key(self) -> None:
         if not isinstance(self._source, WeChat4LocalSource):
@@ -1050,6 +1155,16 @@ class MainWindow(QMainWindow):
             not busy and self._source is not None and self.conversation_combo.currentIndex() >= 0
         )
         self.image_key_button.setEnabled(not busy and isinstance(self._source, WeChat4LocalSource))
+        self.voice_button.setEnabled(
+            not busy
+            and any(
+                message.type is MessageType.VOICE
+                and message.voice_path
+                and message.voice_path.is_file()
+                and not message.transcript
+                for message in self._messages_in_selected_range()
+            )
+        )
 
     def _set_connection_state(self, text: str, state: str) -> None:
         self.connection_badge.setText(text)
@@ -1077,6 +1192,7 @@ class MainWindow(QMainWindow):
             self.end_date.setDate(selected)
             self.end_date.blockSignals(False)
         self._refresh_preview()
+        self._update_voice_button()
 
     def _end_date_changed(self, selected: QDate) -> None:
         if selected < self.start_date.date():
@@ -1084,6 +1200,7 @@ class MainWindow(QMainWindow):
             self.start_date.setDate(selected)
             self.start_date.blockSignals(False)
         self._refresh_preview()
+        self._update_voice_button()
 
     def _show_date_calendar(self, date_edit: QDateEdit, _anchor: QToolButton) -> None:
         title = "选择开始日期" if date_edit is self.start_date else "选择结束日期"
@@ -1117,6 +1234,8 @@ class MainWindow(QMainWindow):
         self._source = None
         self._image_reading_enabled = False
         self.image_key_button.setText("读取图片")
+        self.voice_button.setEnabled(False)
+        self.voice_button.setText("转写语音")
         self._set_connection_state("未连接", "idle")
 
     def closeEvent(self, event: QCloseEvent) -> None:
@@ -1124,6 +1243,7 @@ class MainWindow(QMainWindow):
             self._source_worker,
             self._message_worker,
             self._image_worker,
+            self._voice_worker,
             self._export_worker,
         )
         running = [worker for worker in workers if worker is not None and worker.isRunning()]

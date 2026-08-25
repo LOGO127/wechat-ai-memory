@@ -18,10 +18,11 @@ from .wechat4_crypto import DecryptedDatabaseCache, ProgressCallback
 from .wechat4_discovery import WeChat4Account, select_wechat4_account
 from .wechat4_key_capture import capture_account_key
 from .wechat4_media import DecryptedImageCache
+from .wechat4_voice import WeChatVoiceCache
+from ..voice import VoiceTranscriptCache, default_voice_model, voice_placeholder
 
 
 MESSAGE_TYPE_LABELS = {
-    34: "[语音]",
     42: "[名片]",
     43: "[视频]",
     47: "[表情]",
@@ -49,6 +50,8 @@ class WeChat4LocalSource:
         )
         self._databases = DecryptedDatabaseCache(self.account.db_dir, raw_key=self.raw_key)
         self._images = DecryptedImageCache(self.account.attachment_dir, image_key)
+        self._voices = WeChatVoiceCache(self._databases, self.account.id)
+        self._voice_transcripts = VoiceTranscriptCache()
         self._contacts = self._load_contacts()
         self._message_locations = self._index_message_tables(progress)
         self._conversations = self._load_conversations()
@@ -113,9 +116,8 @@ class WeChat4LocalSource:
                     parameters,
                 ).fetchall()
                 own_sender_id = self._own_sender_id(connection)
-            source_id = Path(relative_path).stem
             messages.extend(
-                self._message_from_row(conversation, row, own_sender_id, source_id)
+                self._message_from_row(conversation, row, own_sender_id, relative_path)
                 for row in rows
             )
         return sorted(messages, key=lambda message: (message.timestamp, message.id))
@@ -219,12 +221,14 @@ class WeChat4LocalSource:
         conversation: Conversation,
         row: sqlite3.Row,
         own_sender_id: int | None,
-        source_id: str,
+        source_database: str,
     ) -> Message:
         raw_type = int(row["local_type"] or 0)
         message_type = raw_type & 0xFFFF
         content = _decode_content(row["message_content"], row["content_compression"])
         prefix_sender, content = _strip_group_prefix(content)
+        local_id = int(row["local_id"] or 0)
+        server_id = int(row["server_id"] or 0)
         sender_wxid = str(row["sender_wxid"] or prefix_sender or "")
         outgoing = own_sender_id is not None and int(row["real_sender_id"] or 0) == own_sender_id
         if outgoing:
@@ -236,6 +240,9 @@ class WeChat4LocalSource:
 
         model_type = MessageType.TEXT
         rendered_content = content
+        audio_path: Path | None = None
+        duration_ms: int | None = None
+        transcript: str | None = None
         if message_type == 3:
             identifiers = _image_identifiers(row["packed_info_data"], content)
             image_path = self._images.resolve(identifiers)
@@ -248,6 +255,21 @@ class WeChat4LocalSource:
         elif message_type == 49:
             model_type = MessageType.FILE
             rendered_content = _type_49_content(content, raw_type)
+        elif message_type == 34:
+            model_type = MessageType.VOICE
+            duration_ms = _voice_duration(content)
+            audio_path = self._voices.resolve(
+                source_database,
+                conversation.id,
+                local_id,
+                server_id,
+            )
+            transcript = (
+                self._voice_transcripts.load(audio_path, default_voice_model())
+                if audio_path
+                else None
+            )
+            rendered_content = transcript or voice_placeholder(duration_ms, audio_path is not None)
         elif message_type in MESSAGE_TYPE_LABELS:
             model_type = MessageType.SYSTEM
             rendered_content = MESSAGE_TYPE_LABELS[message_type]
@@ -261,8 +283,7 @@ class WeChat4LocalSource:
         timestamp = int(row["create_time"] or 0)
         if timestamp > 10_000_000_000:
             timestamp //= 1000
-        local_id = int(row["local_id"] or 0)
-        server_id = int(row["server_id"] or 0)
+        source_id = Path(source_database).stem
         message_id = str(server_id) if server_id else f"{conversation.id}:{source_id}:{local_id}"
         return Message(
             id=message_id,
@@ -272,6 +293,9 @@ class WeChat4LocalSource:
             type=model_type,
             content=rendered_content,
             is_outgoing=outgoing,
+            audio_path=audio_path,
+            duration_ms=duration_ms,
+            transcript=transcript,
         )
 
 
@@ -387,3 +411,20 @@ def _xml_value(content: str, tag: str) -> str:
         pass
     match = re.search(fr"<{tag}>([\s\S]*?)</{tag}>", content, re.IGNORECASE)
     return html.unescape(match.group(1)).strip() if match else ""
+
+
+def _voice_duration(content: str) -> int | None:
+    if not content:
+        return None
+    try:
+        root = ElementTree.fromstring(content)
+        node = root.find(".//voicemsg")
+        value = node.attrib.get("voicelength") if node is not None else None
+    except ElementTree.ParseError:
+        match = re.search(r'<voicemsg\b[^>]*\bvoicelength=["\'](\d+)["\']', content, re.IGNORECASE)
+        value = match.group(1) if match else None
+    try:
+        duration = int(value) if value else 0
+    except ValueError:
+        return None
+    return duration if duration > 0 else None

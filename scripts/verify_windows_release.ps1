@@ -34,15 +34,21 @@ foreach ($Executable in @($DirectoryExe, $PortableExe, $PublishedPortable)) {
 }
 
 $ForbiddenRuntime = Get-ChildItem -LiteralPath (Join-Path $Root "dist\WeChatAIMemory") -Recurse -Force |
-    Where-Object { $_.Name -match '^(numpy|imageio)(\.|$)' }
+    Where-Object { $_.Name -match '^imageio(\.|$)' }
 if ($ForbiddenRuntime) {
-    throw "Unused media dependencies leaked into the release package: $($ForbiddenRuntime.FullName -join ', ')"
+    throw "Unused imageio dependency leaked into the release package: $($ForbiddenRuntime.FullName -join ', ')"
 }
 
 $BundledFFmpeg = Get-ChildItem -LiteralPath (Join-Path $Root "dist\WeChatAIMemory") -Recurse -File |
     Where-Object { $_.Name -match '^ffmpeg.*\.exe$' }
 if (-not $BundledFFmpeg) {
     throw "The WXGF image decoder was not bundled in the Windows release."
+}
+
+$BundledVad = Get-ChildItem -LiteralPath (Join-Path $Root "dist\WeChatAIMemory") -Recurse -File |
+    Where-Object { $_.Name -eq 'silero_vad_v6.onnx' }
+if (-not $BundledVad) {
+    throw "The faster-whisper VAD model was not bundled in the Windows release."
 }
 
 New-Item -ItemType Directory -Path $SmokeRoot -Force | Out-Null

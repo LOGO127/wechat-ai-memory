@@ -1,5 +1,25 @@
 # Changelog
 
+## v0.3.7-alpha
+
+### Added
+
+- 从微信 4.x 的本地媒体数据库关联并提取语音消息，不再只显示语音占位符。
+- 使用 faster-whisper 在本机完成中文语音转写，结果按音频指纹和模型版本缓存。
+- 记忆预览增加“转写语音”操作，仅处理当前日期范围；转写文字可参与关键词搜索并进入 PDF、Markdown 与 JSON。
+- JSON 语音消息支持 `audio_path`、`duration_ms` 和 `transcript` 字段。
+
+### Privacy
+
+- 语音解码、识别和缓存均在本机完成，聊天内容不会发送给远程 API。
+- 首次转写会从 Hugging Face 下载 `small` 模型，之后可离线复用。
+
+### Verified
+
+- 在真实微信 4.x 数据中验证 126 条语音消息全部能关联到对应 SILK 数据。
+- 使用真实 SILK 语音完成解码和 faster-whisper 端到端转写验证。
+- 新增语音提取、时长解析、转写缓存和占位状态回归测试。
+
 ## v0.3.6-alpha
 
 ### Improved
