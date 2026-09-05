@@ -17,8 +17,12 @@ src_dir = project_dir / "src"
 if str(src_dir) not in sys.path:
     sys.path.insert(0, str(src_dir))
 
-from wechat_context_exporter.ui.main_window import main  # noqa: E402
-
-
 if __name__ == "__main__":
-    raise SystemExit(main())
+    if sys.argv[1:2] == ["--verify-runtime"]:
+        from wechat_context_exporter.runtime_check import main
+
+        raise SystemExit(main(sys.argv[2:]))
+    else:
+        from wechat_context_exporter.ui.main_window import main
+
+        raise SystemExit(main())

@@ -2,10 +2,10 @@ from __future__ import annotations
 
 import collections
 import os
-import shutil
 import struct
 import subprocess
 import tempfile
+from io import BytesIO
 from pathlib import Path
 
 from Crypto.Cipher import AES
@@ -91,9 +91,26 @@ def decode_wxgf_image(data: bytes, ffmpeg_path: str | Path | None = None) -> byt
     if not partitions:
         raise SourceError("No HEVC image partition was found in the WeChat WXGF file")
     offset, size = max(partitions, key=lambda item: item[1])
-    ffmpeg = str(ffmpeg_path) if ffmpeg_path else _find_ffmpeg()
-    if not ffmpeg:
-        raise SourceError("WXGF original images require the bundled FFmpeg decoder")
+    hevc = data[offset : offset + size]
+    if ffmpeg_path is not None:
+        return _decode_hevc_with_ffmpeg(hevc, str(ffmpeg_path))
+    try:
+        import av
+    except ImportError as exc:
+        raise SourceError("WXGF original images require the bundled PyAV decoder") from exc
+    try:
+        with av.open(BytesIO(hevc), mode="r", format="hevc") as container:
+            frame = next(container.decode(video=0), None)
+            if frame is None:
+                raise SourceError("No image frame was found in the WeChat WXGF file")
+            output = BytesIO()
+            frame.to_image().save(output, format="PNG")
+            return output.getvalue()
+    except (av.FFmpegError, ValueError) as exc:
+        raise SourceError("Failed to decode the WeChat WXGF image") from exc
+
+
+def _decode_hevc_with_ffmpeg(hevc: bytes, ffmpeg: str) -> bytes:
     command = [
         ffmpeg,
         "-hide_banner",
@@ -115,7 +132,7 @@ def decode_wxgf_image(data: bytes, ffmpeg_path: str | Path | None = None) -> byt
     try:
         result = subprocess.run(
             command,
-            input=data[offset : offset + size],
+            input=hevc,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             timeout=30,
@@ -153,21 +170,6 @@ def _wxgf_partitions(data: bytes) -> list[tuple[int, int]]:
         if partitions:
             return partitions
     return []
-
-
-def _find_ffmpeg() -> str | None:
-    configured = os.environ.get("FFMPEG_PATH")
-    if configured and Path(configured).is_file():
-        return configured
-    try:
-        import imageio_ffmpeg
-
-        bundled = imageio_ffmpeg.get_ffmpeg_exe()
-        if bundled and Path(bundled).is_file():
-            return bundled
-    except (ImportError, OSError, RuntimeError):
-        pass
-    return shutil.which("ffmpeg")
 
 
 class DecryptedImageCache:

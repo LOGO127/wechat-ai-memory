@@ -12,7 +12,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/LOGO127/wechat-ai-memory/releases/tag/v0.3.7-alpha"><img alt="Release" src="https://img.shields.io/badge/release-v0.3.7--alpha-07a85b?style=flat-square"></a>
+  <a href="https://github.com/LOGO127/wechat-ai-memory/releases/tag/v0.3.8-alpha"><img alt="Release" src="https://img.shields.io/badge/release-v0.3.8--alpha-07a85b?style=flat-square"></a>
   <img alt="Platform" src="https://img.shields.io/badge/platform-Windows%2010%20%7C%2011-2563eb?style=flat-square">
   <a href="https://github.com/LOGO127/wechat-ai-memory/actions/workflows/test.yml"><img alt="Tests" src="https://github.com/LOGO127/wechat-ai-memory/actions/workflows/test.yml/badge.svg"></a>
   <a href="LICENSE"><img alt="License" src="https://img.shields.io/badge/license-MIT-17211c?style=flat-square"></a>
@@ -36,7 +36,7 @@
 <p align="center"><sub>连接微信 → 读取图片 → 选择记忆范围 → 关键词筛选 → 生成档案 → 查看实际 PDF。点击动画观看高清版本。</sub></p>
 
 > [!IMPORTANT]
-> 当前为 `v0.3.7-alpha` 私人测试版。本机微信读取已在 Windows 微信 4.x 上验证，但微信升级可能改变内部数据格式。首次使用前建议备份重要数据。
+> 当前为 `v0.3.8-alpha` 测试版。本机微信读取已在 Windows 微信 4.x 上验证，但微信升级可能改变内部数据格式。首次使用前建议备份重要数据。
 
 ## 为什么做这个项目
 
@@ -63,7 +63,7 @@
 
 ### Windows 软件包
 
-从 [v0.3.7-alpha Release](https://github.com/LOGO127/wechat-ai-memory/releases/tag/v0.3.7-alpha) 选择一种方式：
+从 [v0.3.8-alpha Release](https://github.com/LOGO127/wechat-ai-memory/releases/tag/v0.3.8-alpha) 选择一种方式：
 
 | 下载文件 | 使用方式 | 适合场景 |
 | --- | --- | --- |
@@ -71,6 +71,10 @@
 | `WeChatAIMemory-Windows-x64.zip` | 完整解压，再运行目录内的 `WeChatAIMemory.exe` | 启动更快，便于排查安全软件拦截 |
 
 软件包已经包含 Python、Qt、Frida、PDF 与加密运行库，目标电脑不需要安装开发环境。
+
+`v0.3.8` 保留现有 UI、微信读取、高清图片和语音转写能力，精简重复编解码库与无用 Qt 插件。本地 Windows x64 构建的便携 EXE 从 **210.3 MiB 降到 169.4 MiB，减少约 19.5%**；ZIP 从 216.2 MiB 降到 173.9 MiB。实际下载体积以 Release 附件为准，详情见 [更新记录](CHANGELOG.md)。
+
+Whisper 语音模型仍在首次转写时按需下载，不包含在上述软件包体积中。按需安装语音引擎属于后续优化方向，本版没有移除语音运行库。
 
 单文件版首次启动会把运行库释放到 Windows 临时目录，等待十几秒属于正常现象。ZIP 版不能只复制其中的 EXE，必须保留同目录下的 `_internal` 文件夹。
 

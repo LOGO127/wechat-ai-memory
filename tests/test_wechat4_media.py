@@ -1,13 +1,17 @@
 from __future__ import annotations
 
 import struct
+import sys
 from io import BytesIO
 from types import SimpleNamespace
 
+import av
+import pytest
 from Crypto.Cipher import AES
 from PIL import Image
 
 from wechat_context_exporter.sources import wechat4_media
+from wechat_context_exporter.sources.base import SourceError
 from wechat_context_exporter.sources.wechat4_media import (
     V2_MAGIC,
     _wxgf_partitions,
@@ -103,3 +107,66 @@ def test_wxgf_decoder_passes_largest_partition_to_ffmpeg(monkeypatch) -> None:
     assert captured["command"][0] == "ffmpeg-test"
     assert captured["input"] == large
     assert decoded.startswith(b"\x89PNG\r\n\x1a\n")
+
+
+def _encode_hevc(image: Image.Image) -> bytes:
+    output = BytesIO()
+    with av.open(output, mode="w", format="hevc") as container:
+        stream = container.add_stream("libx265", rate=1)
+        stream.width, stream.height = image.size
+        stream.pix_fmt = "gbrp"
+        stream.options = {
+            "x265-params": "lossless=1:log-level=error:pools=none:frame-threads=1",
+        }
+        frame = av.VideoFrame.from_image(image)
+        for packet in stream.encode(frame):
+            container.mux(packet)
+        for packet in stream.encode():
+            container.mux(packet)
+    return output.getvalue()
+
+
+def test_wxgf_decoder_preserves_largest_lossless_image_pixels() -> None:
+    original = Image.new("RGB", (80, 64))
+    original.putdata(
+        [((x * 7) % 256, (y * 11) % 256, (x * y) % 256) for y in range(64) for x in range(80)]
+    )
+    thumbnail = _encode_hevc(Image.new("RGB", (16, 16), "#167b55"))
+    full_resolution = _encode_hevc(original)
+    assert len(full_resolution) > len(thumbnail)
+    data = (
+        b"wxgf\x09"
+        + len(thumbnail).to_bytes(4, "big")
+        + thumbnail
+        + len(full_resolution).to_bytes(4, "big")
+        + full_resolution
+    )
+
+    decoded = decode_wxgf_image(data)
+
+    with Image.open(BytesIO(decoded)) as image:
+        assert image.format == "PNG"
+        assert image.size == original.size
+        assert image.convert("RGB").tobytes() == original.tobytes()
+
+
+@pytest.mark.parametrize(
+    ("data", "error"),
+    [
+        (b"not-wxgf", "Invalid WeChat WXGF image"),
+        (b"wxgf\x09" + b"\x00" * 12, "No HEVC image partition"),
+        (b"wxgf\x09\x00\x00\x00\x08\x00\x00\x00\x01bad!", "Failed to decode|No image frame"),
+    ],
+)
+def test_wxgf_decoder_reports_malformed_images(data: bytes, error: str) -> None:
+    with pytest.raises(SourceError, match=error):
+        decode_wxgf_image(data)
+
+
+def test_wxgf_decoder_reports_missing_dependency(monkeypatch) -> None:
+    stream = b"\x00\x00\x00\x01\x40\x01hevc-frame"
+    data = b"wxgf\x09" + len(stream).to_bytes(4, "big") + stream
+    monkeypatch.setitem(sys.modules, "av", None)
+
+    with pytest.raises(SourceError, match="bundled PyAV decoder"):
+        decode_wxgf_image(data)

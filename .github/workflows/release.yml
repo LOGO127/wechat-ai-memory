@@ -32,7 +32,7 @@ jobs:
         run: .\.venv-gui\Scripts\python.exe -m pytest
       - name: Build Windows packages
         run: .\scripts\build_windows.ps1 -SkipInstall
-      - name: Verify packaged GUI and outputs
+      - name: Verify package size, native runtime, GUI and outputs
         run: .\scripts\verify_windows_release.ps1
       - name: Upload verified build
         uses: actions/upload-artifact@v7
@@ -43,6 +43,7 @@ jobs:
             outputs/WeChatAIMemory-Windows-x64.zip
             outputs/WeChatAIMemory-Portable.exe
             outputs/SHA256SUMS.txt
+            work/release-smoke/package-sizes.json
       - name: Check tag version
         if: startsWith(github.ref, 'refs/tags/')
         shell: pwsh
@@ -63,7 +64,13 @@ jobs:
             "outputs/WeChatAIMemory-Windows-x64.zip",
             "outputs/WeChatAIMemory-Portable.exe",
             "outputs/SHA256SUMS.txt",
-            "--verify-tag", "--generate-notes"
+            "--verify-tag"
           )
+          $Notes = Join-Path "docs/releases" ($env:GITHUB_REF_NAME + ".md")
+          if (Test-Path -LiteralPath $Notes) {
+            $Arguments += @("--notes-file", $Notes)
+          } else {
+            $Arguments += "--generate-notes"
+          }
           if ($env:GITHUB_REF_NAME -match "-") { $Arguments += "--prerelease" }
           gh @Arguments

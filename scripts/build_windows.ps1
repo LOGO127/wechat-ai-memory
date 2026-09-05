@@ -10,8 +10,28 @@ if (-not (Test-Path -LiteralPath $Python)) {
     throw "Missing .venv-gui. Create the project environment before building."
 }
 
+$SavedEnvironment = @{}
+foreach ($Name in @("PATH", "PYTHONPATH", "PYTHONHOME", "PYTHONNOUSERSITE")) {
+    $SavedEnvironment[$Name] = [Environment]::GetEnvironmentVariable($Name, "Process")
+}
+
 Push-Location $Root
 try {
+    # Native hooks scan PATH; unrelated developer tools can contribute large or incompatible DLLs.
+    $BasePython = (& $Python -I -c "import sys; print(sys.base_prefix)").Trim()
+    if ($LASTEXITCODE -ne 0 -or -not $BasePython) { throw "Could not locate the base Python runtime." }
+    $env:PATH = @(
+        (Split-Path -Parent $Python),
+        $BasePython,
+        (Join-Path $BasePython "DLLs"),
+        (Join-Path $env:SystemRoot "System32"),
+        (Join-Path $env:SystemRoot "System32\Wbem"),
+        $env:SystemRoot
+    ) -join [IO.Path]::PathSeparator
+    $env:PYTHONPATH = $null
+    $env:PYTHONHOME = $null
+    $env:PYTHONNOUSERSITE = "1"
+
     if (-not $SkipInstall) {
         & $Python -m pip install -e ".[gui,build]"
         if ($LASTEXITCODE -ne 0) { throw "Build dependencies could not be installed." }
@@ -39,5 +59,8 @@ try {
     Write-Host "Portable executable: $Portable"
 }
 finally {
+    foreach ($Name in $SavedEnvironment.Keys) {
+        [Environment]::SetEnvironmentVariable($Name, $SavedEnvironment[$Name], "Process")
+    }
     Pop-Location
 }

@@ -151,6 +151,34 @@ def run_smoke(executable: Path, fixture: Path, output: Path) -> dict[str, object
             raise RuntimeError(f"Unexpected packaged export result: {result}")
         if result["rendered_pages"] != 1:
             raise RuntimeError(f"Expected one rendered page: {result}")
+
+        image_output = output.with_name(f"{output.stem}-image.pdf")
+        for path in (image_output, image_output.with_suffix(".json"), image_output.with_suffix(".md")):
+            path.unlink(missing_ok=True)
+        search.set_edit_text("demo_result.png")
+        _wait_for(
+            lambda: "1 条匹配 · 当前范围 8 条" in _text_names(window),
+            "image filtering",
+        )
+        output_edit.set_edit_text(str(image_output))
+        _ensure_checked(window.child_window(title="高清图片独立成页", control_type="CheckBox"))
+        window.child_window(title="生成记忆档案", control_type="Button").invoke()
+        _wait_for(image_output.with_suffix(".json").is_file, "image export", timeout=45)
+        image_document = PdfReader(image_output)
+        if len(image_document.pages) != 2:
+            raise RuntimeError("Image export must contain a chat page and a full-resolution image page")
+        if any(page.images[0].image.size != (2480, 3508) for page in image_document.pages):
+            raise RuntimeError("Image export did not retain 300 DPI pages")
+        image_payload = json.loads(image_output.with_suffix(".json").read_text(encoding="utf-8"))
+        image_message = image_payload["conversations"][0]["messages"]
+        if len(image_message) != 1 or image_message[0]["id"] != "m003":
+            raise RuntimeError("Image export selected the wrong message")
+        attachment = image_output.parent / image_message[0]["content"]
+        if attachment.read_bytes() != (fixture.parent / "demo_result.png").read_bytes():
+            raise RuntimeError("Image companion attachment differs from the original")
+        result["image_pdf_pages"] = len(image_document.pages)
+        result["image_dpi"] = 300
+        result["image_original_preserved"] = True
         return result
     finally:
         if window is not None:
